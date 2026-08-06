@@ -147,6 +147,17 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             'condition' => $condition,
         ]);
 
+        $this->add_control('theme', [
+            'label' => __('Player theme', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::SELECT,
+            'default' => $defaults['theme'] ?? 'studio',
+            'options' => [
+                'studio' => __('Studio', 'net-fm-player'),
+                'vinyl' => __('Vinyl', 'net-fm-player'),
+            ],
+            'condition' => $condition,
+        ]);
+
         $this->end_controls_section();
     }
 
@@ -160,7 +171,7 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
         }
 
         echo do_shortcode(sprintf(
-            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" default_stream="%s" fallback_art="%s"]',
+            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" default_stream="%s" fallback_art="%s" theme="%s"]',
             esc_attr($settings['station_label'] ?? ''),
             esc_url($settings['azuracast_base_url'] ?? ''),
             esc_attr($settings['station_shortcode'] ?? ''),
@@ -170,7 +181,8 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             esc_url($settings['stream_secondary_url'] ?? ''),
             esc_attr($settings['stream_secondary_label'] ?? ''),
             esc_attr($settings['default_stream'] ?? 'primary'),
-            esc_url($settings['fallback_art'] ?? '')
+            esc_url($settings['fallback_art'] ?? ''),
+            esc_attr($settings['theme'] ?? 'studio')
         ));
     }
 }

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: NET FM Player
  * Description: Universal AzuraCast/direct-stream radio player. Provides [net_fm_player] shortcode and an Elementor widget.
- * Version: 1.3.1
+ * Version: 1.3.8
  * Author: NET FM
  * License: GPL-2.0-or-later
  * Text Domain: net-fm-player
@@ -14,7 +14,7 @@ if (!defined('ABSPATH')) {
 
 final class Net_Fm_Player_Plugin
 {
-    public const VERSION = '1.3.1';
+    public const VERSION = '1.3.8';
     public const SHORTCODE = 'net_fm_player';
     public const OPTION_NAME = 'net_fm_player_options';
 
@@ -41,16 +41,17 @@ final class Net_Fm_Player_Plugin
     public static function defaults()
     {
         return [
-            'station_label' => 'NET FM',
-            'azuracast_base_url' => '',
-            'station_shortcode' => '',
+            'station_label' => 'upwaveradio',
+            'azuracast_base_url' => 'https://stream.net-fm.ru',
+            'station_shortcode' => 'upwaveradio',
             'api_url' => '',
-            'stream_primary_url' => '',
-            'stream_primary_label' => 'Primary',
-            'stream_secondary_url' => '',
-            'stream_secondary_label' => 'Secondary',
+            'stream_primary_url' => 'https://stream.net-fm.ru/listen/upwaveradio/stream128',
+            'stream_primary_label' => '128 kbps',
+            'stream_secondary_url' => 'https://stream.net-fm.ru/listen/upwaveradio/stream320',
+            'stream_secondary_label' => '320 kbps',
             'default_stream' => 'primary',
             'fallback_art' => '',
+            'theme' => 'studio',
         ];
     }
 
@@ -120,6 +121,7 @@ final class Net_Fm_Player_Plugin
             'stream_secondary_label' => sanitize_text_field($input['stream_secondary_label'] ?? $defaults['stream_secondary_label']),
             'default_stream' => (($input['default_stream'] ?? $defaults['default_stream']) === 'secondary') ? 'secondary' : 'primary',
             'fallback_art' => esc_url_raw($input['fallback_art'] ?? $defaults['fallback_art']),
+            'theme' => (($input['theme'] ?? $defaults['theme']) === 'vinyl') ? 'vinyl' : 'studio',
         ];
     }
 
@@ -161,6 +163,15 @@ final class Net_Fm_Player_Plugin
                         </td>
                     </tr>
                     <?php $this->render_text_row('fallback_art', __('Fallback cover URL', 'net-fm-player'), $options['fallback_art'], 'url', __('Optional. Used only when metadata has no cover art.', 'net-fm-player')); ?>
+                    <tr>
+                        <th scope="row"><label for="nfp-theme"><?php echo esc_html__('Player theme', 'net-fm-player'); ?></label></th>
+                        <td>
+                            <select id="nfp-theme" name="<?php echo esc_attr(self::OPTION_NAME); ?>[theme]">
+                                <option value="studio" <?php selected($options['theme'], 'studio'); ?>><?php echo esc_html__('Studio', 'net-fm-player'); ?></option>
+                                <option value="vinyl" <?php selected($options['theme'], 'vinyl'); ?>><?php echo esc_html__('Vinyl', 'net-fm-player'); ?></option>
+                            </select>
+                        </td>
+                    </tr>
                 </table>
                 <?php submit_button(); ?>
             </form>
@@ -201,9 +212,42 @@ final class Net_Fm_Player_Plugin
         wp_enqueue_script('net-fm-player');
     }
 
+    private function build_player_config($atts)
+    {
+        $default_stream = $atts['default_stream'] === 'secondary' ? 'secondary' : 'primary';
+        $primary_label = sanitize_text_field($atts['stream_primary_label'] ?: __('Primary', 'net-fm-player'));
+        $secondary_label = sanitize_text_field($atts['stream_secondary_label'] ?: __('Secondary', 'net-fm-player'));
+        $station_label = sanitize_text_field($atts['station_label'] ?: __('Radio', 'net-fm-player'));
+
+        $config = [
+            'apiUrl' => self::build_api_url($atts['api_url'], $atts['azuracast_base_url'], $atts['station_shortcode']),
+            'azuracastBaseUrl' => esc_url_raw($atts['azuracast_base_url']),
+            'stationShortcode' => sanitize_text_field($atts['station_shortcode']),
+            'streams' => [
+                'primary' => esc_url_raw($atts['stream_primary_url']),
+                'secondary' => esc_url_raw($atts['stream_secondary_url']),
+            ],
+            'streamLabels' => [
+                'primary' => $primary_label,
+                'secondary' => $secondary_label,
+            ],
+            'defaultStream' => $default_stream,
+            'fallbackArt' => esc_url_raw($atts['fallback_art']),
+            'stationLabel' => $station_label,
+            'theme' => $atts['theme'] === 'vinyl' ? 'vinyl' : 'studio',
+        ];
+
+        if (empty($config['streams'][$config['defaultStream']])) {
+            $config['defaultStream'] = empty($config['streams']['primary']) ? 'secondary' : 'primary';
+        }
+
+        return $config;
+    }
+
     public function render_shortcode($atts = [])
     {
-        $defaults = self::get_options();
+        $use_global = ($atts['use_global'] ?? 'yes') !== 'no';
+        $defaults = $use_global ? self::get_options() : self::defaults();
 
         $atts = shortcode_atts(
             [
@@ -211,15 +255,16 @@ final class Net_Fm_Player_Plugin
                 'api_url' => $defaults['api_url'],
                 'azuracast_base_url' => $defaults['azuracast_base_url'],
                 'station_shortcode' => $defaults['station_shortcode'],
-                'stream_primary' => $defaults['stream_primary_url'],
+                'stream_primary' => '',
                 'stream_primary_url' => $defaults['stream_primary_url'],
                 'stream_primary_label' => $defaults['stream_primary_label'],
-                'stream_secondary' => $defaults['stream_secondary_url'],
+                'stream_secondary' => '',
                 'stream_secondary_url' => $defaults['stream_secondary_url'],
                 'stream_secondary_label' => $defaults['stream_secondary_label'],
                 'default_stream' => $defaults['default_stream'],
                 'fallback_art' => $defaults['fallback_art'],
                 'station_label' => $defaults['station_label'],
+                'theme' => $defaults['theme'],
             ],
             $atts,
             self::SHORTCODE
@@ -234,71 +279,57 @@ final class Net_Fm_Player_Plugin
         }
 
         $this->enqueue_assets();
-
-        $default_stream = $atts['default_stream'] === 'secondary' ? 'secondary' : 'primary';
-        $primary_label = sanitize_text_field($atts['stream_primary_label'] ?: __('Primary', 'net-fm-player'));
-        $secondary_label = sanitize_text_field($atts['stream_secondary_label'] ?: __('Secondary', 'net-fm-player'));
-        $station_label = sanitize_text_field($atts['station_label'] ?: __('Radio', 'net-fm-player'));
-        $api_url = self::build_api_url($atts['api_url'], $atts['azuracast_base_url'], $atts['station_shortcode']);
-        $fallback_art = esc_url_raw($atts['fallback_art']);
-
-        $config = [
-            'apiUrl' => $api_url,
-            'azuracastBaseUrl' => esc_url_raw($atts['azuracast_base_url']),
-            'stationShortcode' => sanitize_text_field($atts['station_shortcode']),
-            'streams' => [
-                'primary' => esc_url_raw($atts['stream_primary_url']),
-                'secondary' => esc_url_raw($atts['stream_secondary_url']),
-            ],
-            'streamLabels' => [
-                'primary' => $primary_label,
-                'secondary' => $secondary_label,
-            ],
-            'defaultStream' => $default_stream,
-            'fallbackArt' => $fallback_art,
-            'stationLabel' => $station_label,
-        ];
-
+        $config = $this->build_player_config($atts);
         $config_json = wp_json_encode($config);
+        $has_streams = !empty($config['streams']['primary']) || !empty($config['streams']['secondary']);
 
         ob_start();
         ?>
-        <div class="nfp" data-nfp data-config="<?php echo esc_attr($config_json); ?>">
+        <div class="nfp nfp--theme-<?php echo esc_attr($config['theme']); ?>" data-nfp data-config="<?php echo esc_attr($config_json); ?>">
             <div class="nfp__head">
-                <span class="nfp__live" data-nfp-live><?php echo esc_html__('В эфире', 'net-fm-player'); ?></span>
-                <span class="nfp__count" data-nfp-count><?php echo esc_html($station_label); ?></span>
+                <span class="nfp__live" data-nfp-live role="status" aria-live="polite"><?php echo esc_html__('В эфире', 'net-fm-player'); ?></span>
+                <span class="nfp__count" data-nfp-count><?php echo esc_html($config['stationLabel']); ?></span>
             </div>
 
-            <div class="nfp__cover <?php echo $fallback_art ? '' : 'is-placeholder'; ?>" data-nfp-cover>
-                <img class="nfp__art" data-nfp-art <?php echo $fallback_art ? 'src="' . esc_url($fallback_art) . '"' : ''; ?> alt="" loading="eager">
-                <div class="nfp__placeholder" data-nfp-placeholder><?php echo esc_html($station_label); ?></div>
+            <div class="nfp__cover <?php echo $config['fallbackArt'] ? '' : 'is-placeholder'; ?>" data-nfp-cover>
+                <img class="nfp__art" data-nfp-art <?php echo $config['fallbackArt'] ? 'src="' . esc_url($config['fallbackArt']) . '"' : ''; ?> alt="" loading="eager">
+                <div class="nfp__placeholder" data-nfp-placeholder><?php echo esc_html($config['stationLabel']); ?></div>
                 <canvas class="nfp__scope" data-nfp-scope width="640" height="160" aria-hidden="true"></canvas>
                 <div class="nfp__eq" data-nfp-eq aria-hidden="true">
                     <?php for ($i = 0; $i < 24; $i++) : ?>
                         <i></i>
                     <?php endfor; ?>
                 </div>
-                <div class="nfp__eq-note" data-nfp-eq-note hidden><?php echo esc_html__('Для живого эквалайзера нужен CORS на потоке', 'net-fm-player'); ?></div>
+                <div class="nfp__eq-note" data-nfp-eq-note hidden><?php echo esc_html__('Визуализация эфира', 'net-fm-player'); ?></div>
             </div>
+            <div class="nfp__vinyl-arm" aria-hidden="true"><span class="nfp__vinyl-head"></span></div>
 
             <div class="nfp__info">
                 <div class="nfp__kicker"><?php echo esc_html__('Сейчас играет', 'net-fm-player'); ?></div>
                 <div class="nfp__title" data-nfp-title><?php echo esc_html__('Загрузка эфира...', 'net-fm-player'); ?></div>
-                <div class="nfp__artist" data-nfp-artist><?php echo esc_html($station_label); ?></div>
+                <div class="nfp__artist" data-nfp-artist><?php echo esc_html($config['stationLabel']); ?></div>
             </div>
 
             <div class="nfp__panel">
-                <button class="nfp__play" type="button" data-nfp-toggle aria-label="<?php echo esc_attr__('Включить радио', 'net-fm-player'); ?>">
+                <button class="nfp__play" type="button" data-nfp-toggle aria-label="<?php echo esc_attr__('Включить радио', 'net-fm-player'); ?>"<?php disabled(!$has_streams); ?>>
                     <span class="nfp__play-icon" aria-hidden="true"></span>
                 </button>
 
                 <div class="nfp__quality" role="group" aria-label="<?php echo esc_attr__('Поток', 'net-fm-player'); ?>">
-                    <button class="<?php echo $default_stream === 'primary' ? 'is-active' : ''; ?>" type="button" data-nfp-stream="primary"><?php echo esc_html($primary_label); ?></button>
-                    <button class="<?php echo $default_stream === 'secondary' ? 'is-active' : ''; ?>" type="button" data-nfp-stream="secondary"><?php echo esc_html($secondary_label); ?></button>
+                    <?php foreach ($config['streams'] as $stream_key => $stream_url) : ?>
+                        <?php if (!$stream_url) : ?>
+                            <?php continue; ?>
+                        <?php endif; ?>
+                        <button class="<?php echo $config['defaultStream'] === $stream_key ? 'is-active' : ''; ?>" type="button" data-nfp-stream="<?php echo esc_attr($stream_key); ?>" aria-pressed="<?php echo $config['defaultStream'] === $stream_key ? 'true' : 'false'; ?>"><?php echo esc_html($config['streamLabels'][$stream_key]); ?></button>
+                    <?php endforeach; ?>
                 </div>
 
-                <button class="nfp__mute" type="button" data-nfp-mute aria-label="<?php echo esc_attr__('Выключить звук', 'net-fm-player'); ?>">
-                    <span class="nfp__mute-icon" aria-hidden="true"></span>
+                <button class="nfp__mute" type="button" data-nfp-mute aria-label="<?php echo esc_attr__('Выключить звук', 'net-fm-player'); ?>" aria-pressed="false">
+                    <svg class="nfp__mute-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                        <path class="nfp__mute-speaker" d="M4 10v4h4l5 5V5l-5 5H4z"></path>
+                        <path class="nfp__mute-wave" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05A4.47 4.47 0 0 0 16.5 12zm-2.5-8.77v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.5 7-8.77s-2.99-7.86-7-8.77z"></path>
+                        <path class="nfp__mute-slash" d="M4 4l16 16"></path>
+                    </svg>
                 </button>
             </div>
 
@@ -312,9 +343,9 @@ final class Net_Fm_Player_Plugin
                 <button class="nfp__reaction" type="button" data-nfp-reaction="dislike" aria-pressed="false"><span class="nfp__reaction-icon nfp__reaction-icon--dislike" aria-hidden="true"></span><span><?php echo esc_html__('Дизлайк', 'net-fm-player'); ?></span></button>
             </div>
 
-            <div class="nfp__error" data-nfp-error hidden><?php echo esc_html__('Поток не запустился. Нажмите play еще раз или переключите поток.', 'net-fm-player'); ?></div>
+            <div class="nfp__error" data-nfp-error role="alert" hidden><?php echo esc_html__('Поток не запустился. Нажмите play еще раз или переключите поток.', 'net-fm-player'); ?></div>
 
-            <audio data-nfp-audio preload="auto"></audio>
+            <audio data-nfp-audio preload="none"></audio>
         </div>
         <?php
 

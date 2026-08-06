@@ -12,7 +12,8 @@
       streamLabels: { primary: 'Primary', secondary: 'Secondary' },
       defaultStream: 'primary',
       fallbackArt: '',
-      stationLabel: 'NET FM'
+      stationLabel: 'NET FM',
+      theme: 'studio'
     };
 
     try {
@@ -34,15 +35,15 @@
         },
         defaultStream: parsed.defaultStream === 'secondary' ? 'secondary' : 'primary',
         fallbackArt: parsed.fallbackArt || defaults.fallbackArt,
-        stationLabel: parsed.stationLabel || defaults.stationLabel
+        stationLabel: parsed.stationLabel || defaults.stationLabel,
+        theme: parsed.theme === 'vinyl' ? 'vinyl' : defaults.theme
       };
     } catch (error) {
       return defaults;
     }
   }
 
-  function storageKey(root, suffix) {
-    var config = parseConfig(root);
+  function storageKey(config, suffix) {
     return 'nfp:' + config.stationLabel + ':' + suffix;
   }
 
@@ -61,10 +62,10 @@
     var frequencyData = null;
     var visualizerFrame = null;
     var analyserUnavailable = false;
-    var analyserCheckUrl = '';
-    var analyserCheckPromise = null;
-    var analyserAllowedUrl = '';
-    var analyserDeniedUrl = '';
+    var currentArt = '';
+    var failedArtUrls = {};
+    var playRequested = false;
+    var hasMetadata = false;
 
     var audio = root.querySelector('[data-nfp-audio]');
     var toggle = root.querySelector('[data-nfp-toggle]');
@@ -81,27 +82,38 @@
     var eqNote = root.querySelector('[data-nfp-eq-note]');
     var eqBars = root.querySelectorAll('.nfp__eq i');
     var reactions = root.querySelectorAll('[data-nfp-reaction]');
+    var streamButtons = root.querySelectorAll('[data-nfp-stream]');
 
     if (!audio || !toggle || !mute) return;
 
-    audio.preload = 'auto';
+    audio.preload = 'none';
     audio.volume = volume ? Number(volume.value || 0.85) : 0.85;
 
     function selectedStream() {
       return config.streams[streamKey] || config.streams.primary || config.streams.secondary;
     }
 
-    function setStream(force) {
+    function isCurrentStream(url) {
+      try {
+        return new URL(audio.src, window.location.href).href === new URL(url, window.location.href).href;
+      } catch (error) {
+        return audio.src === url;
+      }
+    }
+
+    function setStream(force, reportMissing) {
       var next = selectedStream();
       if (!next) {
-        showError(true, 'Поток не настроен. Укажите Stream URL в настройках.');
-        return;
+        if (reportMissing) showError(true, 'Поток не настроен. Укажите Stream URL в настройках.');
+        return false;
       }
 
-      if (force || audio.src !== next) {
+      if (force || !isCurrentStream(next)) {
         audio.src = next;
         audio.load();
       }
+
+      return true;
     }
 
     function setPlaying(value) {
@@ -124,6 +136,11 @@
 
     function setCover(src) {
       if (!art || !cover) return;
+      if (src && failedArtUrls[src]) {
+        src = src === config.fallbackArt ? '' : config.fallbackArt;
+      }
+      if (src === currentArt) return;
+      currentArt = src || '';
       if (src) {
         art.src = src;
         art.hidden = false;
@@ -134,6 +151,13 @@
         cover.classList.add('is-placeholder');
         if (placeholder) placeholder.textContent = config.stationLabel;
       }
+    }
+
+    if (art) {
+      art.addEventListener('error', function () {
+        if (currentArt) failedArtUrls[currentArt] = true;
+        setCover(currentArt === config.fallbackArt ? '' : config.fallbackArt);
+      });
     }
 
     function setStaticBars() {
@@ -153,47 +177,8 @@
     function markAnalyserBlocked() {
       root.classList.add('no-analyser');
       root.classList.remove('has-analyser');
-      if (eqNote) eqNote.hidden = false;
+      if (eqNote) eqNote.hidden = true;
       setStaticBars();
-    }
-
-    function canUseAnalyser(streamUrl) {
-      if (!streamUrl) return Promise.resolve(false);
-      if (isSameOriginUrl(streamUrl) || analyserAllowedUrl === streamUrl) return Promise.resolve(true);
-      if (analyserDeniedUrl === streamUrl) return Promise.resolve(false);
-      if (analyserCheckUrl === streamUrl && analyserCheckPromise) return analyserCheckPromise;
-
-      analyserCheckUrl = streamUrl;
-
-      if (!window.fetch) {
-        analyserDeniedUrl = streamUrl;
-        return Promise.resolve(false);
-      }
-
-      var controller = window.AbortController ? new AbortController() : null;
-      var timer = controller ? window.setTimeout(function () { controller.abort(); }, 1800) : null;
-      var options = { method: 'GET', mode: 'cors', cache: 'no-store' };
-      if (controller) options.signal = controller.signal;
-
-      analyserCheckPromise = fetch(streamUrl, options)
-        .then(function (response) {
-          if (timer) window.clearTimeout(timer);
-          analyserAllowedUrl = streamUrl;
-          analyserDeniedUrl = '';
-          if (controller) controller.abort();
-          return Boolean(response);
-        })
-        .catch(function () {
-          if (timer) window.clearTimeout(timer);
-          analyserDeniedUrl = streamUrl;
-          return false;
-        })
-        .then(function (allowed) {
-          analyserCheckPromise = null;
-          return allowed;
-        });
-
-      return analyserCheckPromise;
     }
 
     function setupAnalyser() {
@@ -217,7 +202,7 @@
       } catch (error) {
         analyserUnavailable = true;
         root.classList.add('no-analyser');
-        if (eqNote) eqNote.hidden = false;
+        if (eqNote) eqNote.hidden = true;
         setStaticBars();
         return false;
       }
@@ -233,7 +218,7 @@
       // Cross-origin streams without audio CORS commonly produce silence here.
       if (max < 2) {
         root.classList.add('no-analyser-signal');
-        if (eqNote) eqNote.hidden = false;
+        if (eqNote) eqNote.hidden = true;
         setStaticBars();
       } else {
         root.classList.remove('no-analyser-signal');
@@ -249,20 +234,23 @@
     }
 
     function startVisualizer() {
-      canUseAnalyser(selectedStream()).then(function (allowed) {
-        if (!allowed) {
-          markAnalyserBlocked();
-          return;
-        }
+      // Connecting an external stream to Web Audio can mute native playback
+      // unless the streaming server grants audio CORS access.
+      if (!isSameOriginUrl(selectedStream())) {
+        markAnalyserBlocked();
+        return;
+      }
 
-        root.classList.remove('no-analyser');
-        if (!setupAnalyser()) return;
-        if (audioContext && audioContext.state === 'suspended') audioContext.resume().catch(function () {});
-        if (!visualizerFrame) drawVisualizer();
-      });
+      root.classList.remove('no-analyser');
+      if (!setupAnalyser()) {
+        markAnalyserBlocked();
+        return;
+      }
+      if (audioContext && audioContext.state === 'suspended') audioContext.resume().catch(function () {});
+      if (!visualizerFrame) drawVisualizer();
     }
 
-function stopVisualizer(reset) {
+    function stopVisualizer(reset) {
       if (visualizerFrame) {
         window.cancelAnimationFrame(visualizerFrame);
         visualizerFrame = null;
@@ -270,35 +258,48 @@ function stopVisualizer(reset) {
       if (reset !== false) setStaticBars();
     }
 
-    function play() {
-      showError(false);
-      setStream(false);
+    function startPlayback(forceStream) {
+      if (!setStream(forceStream, true)) return;
+      playRequested = true;
       var playPromise = audio.play();
       if (playPromise && typeof playPromise.catch === 'function') {
         playPromise.catch(function () {
-          showError(true, 'Поток не запустился. Проверьте Stream URL.');
-          setPlaying(false);
-          setBuffering(false);
+          reconnect();
         });
       }
     }
 
+    function play() {
+      showError(false);
+      reconnects = 0;
+      startPlayback(false);
+    }
+
     function pause() {
+      playRequested = false;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
       audio.pause();
       setPlaying(false);
     }
 
     function reconnect() {
-      if (audio.paused || reconnectTimer || reconnects >= MAX_RECONNECTS) return;
+      if (!playRequested || reconnectTimer) return;
+      if (reconnects >= MAX_RECONNECTS) {
+        playRequested = false;
+        showError(true, 'Поток не запустился. Проверьте Stream URL или сервер вещания.');
+        setPlaying(false);
+        setBuffering(false);
+        return;
+      }
+
       reconnects += 1;
       setBuffering(true);
       reconnectTimer = window.setTimeout(function () {
         reconnectTimer = null;
-        setStream(true);
-        audio.play().catch(function () {
-          showError(true, 'Поток прервался. Проверьте Stream URL или сервер вещания.');
-          setBuffering(false);
-        });
+        startPlayback(true);
       }, RECONNECT_DELAY_MS);
     }
 
@@ -307,24 +308,29 @@ function stopVisualizer(reset) {
       else pause();
     });
 
-    mute.addEventListener('click', function () {
-      audio.muted = !audio.muted;
+    function setMuted(value) {
+      audio.muted = Boolean(value);
       root.classList.toggle('is-muted', audio.muted);
       mute.setAttribute('aria-label', audio.muted ? 'Включить звук' : 'Выключить звук');
+      mute.setAttribute('aria-pressed', audio.muted ? 'true' : 'false');
+    }
+
+    mute.addEventListener('click', function () {
+      setMuted(!audio.muted);
     });
 
     if (volume) {
       volume.addEventListener('input', function () {
         audio.volume = Number(volume.value);
         if (audio.volume > 0 && audio.muted) {
-          audio.muted = false;
-          root.classList.remove('is-muted');
+          setMuted(false);
         }
       });
     }
 
     audio.addEventListener('play', function () {
       reconnects = 0;
+      showError(false);
       setPlaying(true);
       setBuffering(false);
     });
@@ -354,20 +360,22 @@ function stopVisualizer(reset) {
     });
 
     audio.addEventListener('error', function () {
-      if (!audio.paused) reconnect();
-      else showError(true, 'Поток не загрузился. Проверьте Stream URL.');
+      reconnect();
     });
 
-    root.querySelectorAll('[data-nfp-stream]').forEach(function (button) {
+    streamButtons.forEach(function (button) {
       button.addEventListener('click', function () {
         streamKey = button.getAttribute('data-nfp-stream') === 'secondary' ? 'secondary' : 'primary';
-        root.querySelectorAll('[data-nfp-stream]').forEach(function (item) {
+        streamButtons.forEach(function (item) {
           item.classList.toggle('is-active', item === button);
+          item.setAttribute('aria-pressed', item === button ? 'true' : 'false');
         });
 
         var wasPlaying = !audio.paused;
-        setStream(true);
-        if (wasPlaying) play();
+        if (wasPlaying) {
+          reconnects = 0;
+          startPlayback(true);
+        }
       });
     });
 
@@ -385,7 +393,7 @@ function stopVisualizer(reset) {
         var active = button.classList.contains('is-active');
         var value = active ? '' : next;
         try {
-          window.localStorage.setItem(storageKey(root, 'reaction:' + (currentSongId || 'current')), value);
+          window.localStorage.setItem(storageKey(config, 'reaction:' + (currentSongId || 'current')), value);
         } catch (error) {}
         applyReaction(value);
       });
@@ -394,7 +402,7 @@ function stopVisualizer(reset) {
     function restoreReaction(songId) {
       var value = '';
       try {
-        value = window.localStorage.getItem(storageKey(root, 'reaction:' + (songId || 'current'))) || '';
+        value = window.localStorage.getItem(storageKey(config, 'reaction:' + (songId || 'current'))) || '';
       } catch (error) {}
       applyReaction(value);
     }
@@ -424,6 +432,7 @@ function stopVisualizer(reset) {
             ? data.listeners.current + ' слушают'
             : config.stationLabel;
           setCover(song.art || config.fallbackArt);
+          hasMetadata = true;
 
           if (songId !== currentSongId) {
             currentSongId = songId;
@@ -431,13 +440,12 @@ function stopVisualizer(reset) {
           }
         })
         .catch(function () {
-          if (!root.classList.contains('is-buffering')) live.textContent = 'Метаданные недоступны';
-          count.textContent = config.stationLabel;
-          setCover(config.fallbackArt);
+          if (!root.classList.contains('is-buffering')) {
+            live.textContent = hasMetadata ? 'Метаданные устарели' : 'Метаданные недоступны';
+          }
         });
     }
 
-    setStream(false);
     setCover(config.fallbackArt);
     setStaticBars();
     refresh();
