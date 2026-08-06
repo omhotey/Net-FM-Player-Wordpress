@@ -141,9 +141,12 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
         ]);
 
         $this->add_control('fallback_art', [
-            'label' => __('Fallback cover URL', 'net-fm-player'),
-            'type' => \Elementor\Controls_Manager::TEXT,
-            'default' => $defaults['fallback_art'] ?? '',
+            'label' => __('Default station logo', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::MEDIA,
+            'default' => [
+                'url' => $defaults['fallback_art'] ?? '',
+            ],
+            'description' => __('Displayed when AzuraCast does not provide track artwork.', 'net-fm-player'),
             'condition' => $condition,
         ]);
 
@@ -159,6 +162,35 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
         ]);
 
         $this->end_controls_section();
+
+        $this->start_controls_section(
+            'style_section',
+            [
+                'label' => __('Colors', 'net-fm-player'),
+                'tab' => \Elementor\Controls_Manager::TAB_STYLE,
+                'condition' => $condition,
+            ]
+        );
+
+        $this->add_control('background_color', [
+            'label' => __('Player background', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::COLOR,
+            'default' => $defaults['background_color'] ?? '',
+        ]);
+
+        $this->add_control('play_button_color', [
+            'label' => __('Play/pause button', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::COLOR,
+            'default' => $defaults['play_button_color'] ?? '',
+        ]);
+
+        $this->add_control('volume_color', [
+            'label' => __('Volume slider', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::COLOR,
+            'default' => $defaults['volume_color'] ?? '',
+        ]);
+
+        $this->end_controls_section();
     }
 
     protected function render()
@@ -170,8 +202,13 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             return;
         }
 
+        $fallback_art = $settings['fallback_art'] ?? '';
+        if (is_array($fallback_art)) {
+            $fallback_art = $fallback_art['url'] ?? '';
+        }
+
         echo do_shortcode(sprintf(
-            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" default_stream="%s" fallback_art="%s" theme="%s"]',
+            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" default_stream="%s" fallback_art="%s" theme="%s" background_color="%s" play_button_color="%s" volume_color="%s"]',
             esc_attr($settings['station_label'] ?? ''),
             esc_url($settings['azuracast_base_url'] ?? ''),
             esc_attr($settings['station_shortcode'] ?? ''),
@@ -181,8 +218,11 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             esc_url($settings['stream_secondary_url'] ?? ''),
             esc_attr($settings['stream_secondary_label'] ?? ''),
             esc_attr($settings['default_stream'] ?? 'primary'),
-            esc_url($settings['fallback_art'] ?? ''),
-            esc_attr($settings['theme'] ?? 'studio')
+            esc_url($fallback_art),
+            esc_attr($settings['theme'] ?? 'studio'),
+            esc_attr($settings['background_color'] ?? ''),
+            esc_attr($settings['play_button_color'] ?? ''),
+            esc_attr($settings['volume_color'] ?? '')
         ));
     }
 }

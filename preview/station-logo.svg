@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" role="img" aria-labelledby="title desc">
+  <title id="title">UPWAVE Radio</title>
+  <desc id="desc">Тестовый логотип станции для локального предпросмотра</desc>
+  <defs>
+    <radialGradient id="background" cx="35%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#26d96b"/>
+      <stop offset="0.55" stop-color="#08772f"/>
+      <stop offset="1" stop-color="#03230e"/>
+    </radialGradient>
+  </defs>
+  <circle cx="400" cy="400" r="400" fill="url(#background)"/>
+  <path d="M155 420c58-145 116 145 174 0s116 145 174 0 116 145 174 0" fill="none" stroke="#f6d94c" stroke-linecap="round" stroke-width="35"/>
+  <text x="400" y="305" fill="#fff" font-family="Arial, sans-serif" font-size="78" font-weight="700" text-anchor="middle">UPWAVE</text>
+  <text x="400" y="585" fill="#fff" font-family="Arial, sans-serif" font-size="48" font-weight="700" letter-spacing="14" text-anchor="middle">RADIO</text>
+</svg>

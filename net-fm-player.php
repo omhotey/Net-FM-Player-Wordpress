@@ -1,11 +1,17 @@
 <?php
 /**
- * Plugin Name: NET FM Player
+ * Plugin Name: NET FM Player for AzuraCast
+ * Plugin URI: https://vibeservice.ru/
  * Description: Universal AzuraCast/direct-stream radio player. Provides [net_fm_player] shortcode and an Elementor widget.
- * Version: 1.3.8
- * Author: NET FM
+ * Version: 0.1.0-alpha
+ * Requires at least: 6.5
+ * Requires PHP: 8.2
+ * Author: omhotey
+ * Author URI: https://vibeservice.ru/
  * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: net-fm-player
+ * Domain Path: /languages
  */
 
 if (!defined('ABSPATH')) {
@@ -14,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 final class Net_Fm_Player_Plugin
 {
-    public const VERSION = '1.3.8';
+    public const VERSION = '0.1.0-alpha';
     public const SHORTCODE = 'net_fm_player';
     public const OPTION_NAME = 'net_fm_player_options';
 
@@ -33,6 +39,7 @@ final class Net_Fm_Player_Plugin
     {
         add_action('admin_menu', [$this, 'register_settings_page']);
         add_action('admin_init', [$this, 'register_settings']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
         add_action('wp_enqueue_scripts', [$this, 'register_assets']);
         add_shortcode(self::SHORTCODE, [$this, 'render_shortcode']);
         add_action('elementor/widgets/register', [$this, 'register_elementor_widget']);
@@ -41,17 +48,20 @@ final class Net_Fm_Player_Plugin
     public static function defaults()
     {
         return [
-            'station_label' => 'upwaveradio',
-            'azuracast_base_url' => 'https://stream.net-fm.ru',
-            'station_shortcode' => 'upwaveradio',
+            'station_label' => 'NET FM',
+            'azuracast_base_url' => '',
+            'station_shortcode' => '',
             'api_url' => '',
-            'stream_primary_url' => 'https://stream.net-fm.ru/listen/upwaveradio/stream128',
-            'stream_primary_label' => '128 kbps',
-            'stream_secondary_url' => 'https://stream.net-fm.ru/listen/upwaveradio/stream320',
-            'stream_secondary_label' => '320 kbps',
+            'stream_primary_url' => '',
+            'stream_primary_label' => 'Primary',
+            'stream_secondary_url' => '',
+            'stream_secondary_label' => 'Secondary',
             'default_stream' => 'primary',
             'fallback_art' => '',
             'theme' => 'studio',
+            'background_color' => '',
+            'play_button_color' => '',
+            'volume_color' => '',
         ];
     }
 
@@ -105,6 +115,62 @@ final class Net_Fm_Player_Plugin
         );
     }
 
+    public function enqueue_admin_assets($hook_suffix)
+    {
+        if ($hook_suffix !== 'settings_page_net-fm-player') {
+            return;
+        }
+
+        wp_enqueue_media();
+        wp_enqueue_style('wp-color-picker');
+        wp_enqueue_script('wp-color-picker');
+
+        $script = sprintf(
+            <<<'JS'
+jQuery(function ($) {
+    $('.nfp-color-field').wpColorPicker();
+
+    $('.nfp-upload-image').on('click', function () {
+        var button = $(this);
+        var frame = wp.media({
+            title: %s,
+            button: { text: %s },
+            library: { type: 'image' },
+            multiple: false
+        });
+
+        frame.on('select', function () {
+            var attachment = frame.state().get('selection').first().toJSON();
+            var row = button.closest('.nfp-image-field');
+            row.find('input[type="url"]').val(attachment.url).trigger('change');
+            row.find('.nfp-image-preview').attr('src', attachment.url).prop('hidden', false);
+            row.find('.nfp-remove-image').prop('hidden', false);
+        });
+
+        frame.open();
+    });
+
+    $('.nfp-remove-image').on('click', function () {
+        var row = $(this).closest('.nfp-image-field');
+        row.find('input[type="url"]').val('').trigger('change');
+        row.find('.nfp-image-preview').removeAttr('src').prop('hidden', true);
+        $(this).prop('hidden', true);
+    });
+});
+JS,
+            wp_json_encode(__('Select station logo', 'net-fm-player')),
+            wp_json_encode(__('Use this image', 'net-fm-player'))
+        );
+
+        wp_add_inline_script('wp-color-picker', $script);
+    }
+
+    private static function sanitize_color($value)
+    {
+        $color = sanitize_hex_color((string) $value);
+        return is_string($color) ? $color : '';
+    }
+
     public function sanitize_options($input)
     {
         $input = is_array($input) ? $input : [];
@@ -122,6 +188,9 @@ final class Net_Fm_Player_Plugin
             'default_stream' => (($input['default_stream'] ?? $defaults['default_stream']) === 'secondary') ? 'secondary' : 'primary',
             'fallback_art' => esc_url_raw($input['fallback_art'] ?? $defaults['fallback_art']),
             'theme' => (($input['theme'] ?? $defaults['theme']) === 'vinyl') ? 'vinyl' : 'studio',
+            'background_color' => self::sanitize_color($input['background_color'] ?? ''),
+            'play_button_color' => self::sanitize_color($input['play_button_color'] ?? ''),
+            'volume_color' => self::sanitize_color($input['volume_color'] ?? ''),
         ];
     }
 
@@ -162,7 +231,7 @@ final class Net_Fm_Player_Plugin
                             </select>
                         </td>
                     </tr>
-                    <?php $this->render_text_row('fallback_art', __('Fallback cover URL', 'net-fm-player'), $options['fallback_art'], 'url', __('Optional. Used only when metadata has no cover art.', 'net-fm-player')); ?>
+                    <?php $this->render_image_row('fallback_art', __('Default station logo', 'net-fm-player'), $options['fallback_art'], __('Displayed when AzuraCast does not provide track artwork.', 'net-fm-player')); ?>
                     <tr>
                         <th scope="row"><label for="nfp-theme"><?php echo esc_html__('Player theme', 'net-fm-player'); ?></label></th>
                         <td>
@@ -172,6 +241,9 @@ final class Net_Fm_Player_Plugin
                             </select>
                         </td>
                     </tr>
+                    <?php $this->render_color_row('background_color', __('Player background color', 'net-fm-player'), $options['background_color']); ?>
+                    <?php $this->render_color_row('play_button_color', __('Play/pause button color', 'net-fm-player'), $options['play_button_color']); ?>
+                    <?php $this->render_color_row('volume_color', __('Volume slider color', 'net-fm-player'), $options['volume_color']); ?>
                 </table>
                 <?php submit_button(); ?>
             </form>
@@ -190,6 +262,39 @@ final class Net_Fm_Player_Plugin
             <th scope="row"><label for="nfp-<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></label></th>
             <td>
                 <input id="nfp-<?php echo esc_attr($key); ?>" class="regular-text" type="<?php echo esc_attr($type); ?>" name="<?php echo esc_attr(self::OPTION_NAME); ?>[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($value); ?>">
+                <?php if ($description) : ?>
+                    <p class="description"><?php echo esc_html($description); ?></p>
+                <?php endif; ?>
+            </td>
+        </tr>
+        <?php
+    }
+
+    private function render_color_row($key, $label, $value)
+    {
+        ?>
+        <tr>
+            <th scope="row"><label for="nfp-<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></label></th>
+            <td>
+                <input id="nfp-<?php echo esc_attr($key); ?>" class="nfp-color-field" type="text" name="<?php echo esc_attr(self::OPTION_NAME); ?>[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($value); ?>" data-default-color="">
+                <p class="description"><?php echo esc_html__('Leave empty to use the selected theme default.', 'net-fm-player'); ?></p>
+            </td>
+        </tr>
+        <?php
+    }
+
+    private function render_image_row($key, $label, $value, $description = '')
+    {
+        ?>
+        <tr>
+            <th scope="row"><label for="nfp-<?php echo esc_attr($key); ?>"><?php echo esc_html($label); ?></label></th>
+            <td>
+                <div class="nfp-image-field">
+                    <input id="nfp-<?php echo esc_attr($key); ?>" class="regular-text" type="url" name="<?php echo esc_attr(self::OPTION_NAME); ?>[<?php echo esc_attr($key); ?>]" value="<?php echo esc_attr($value); ?>">
+                    <button class="button nfp-upload-image" type="button"><?php echo esc_html__('Choose image', 'net-fm-player'); ?></button>
+                    <button class="button-link-delete nfp-remove-image" type="button"<?php echo $value ? '' : ' hidden'; ?>><?php echo esc_html__('Remove image', 'net-fm-player'); ?></button>
+                    <p><img class="nfp-image-preview" src="<?php echo esc_url($value); ?>" alt="" style="max-width:160px;max-height:160px;object-fit:contain;"<?php echo $value ? '' : ' hidden'; ?>></p>
+                </div>
                 <?php if ($description) : ?>
                     <p class="description"><?php echo esc_html($description); ?></p>
                 <?php endif; ?>
@@ -235,6 +340,11 @@ final class Net_Fm_Player_Plugin
             'fallbackArt' => esc_url_raw($atts['fallback_art']),
             'stationLabel' => $station_label,
             'theme' => $atts['theme'] === 'vinyl' ? 'vinyl' : 'studio',
+            'colors' => [
+                'background' => self::sanitize_color($atts['background_color']),
+                'playButton' => self::sanitize_color($atts['play_button_color']),
+                'volume' => self::sanitize_color($atts['volume_color']),
+            ],
         ];
 
         if (empty($config['streams'][$config['defaultStream']])) {
@@ -242,6 +352,41 @@ final class Net_Fm_Player_Plugin
         }
 
         return $config;
+    }
+
+    private function build_player_style($colors)
+    {
+        $styles = [];
+
+        if (!empty($colors['background'])) {
+            $styles[] = '--nfp-player-background:' . $colors['background'];
+        }
+
+        if (!empty($colors['playButton'])) {
+            $styles[] = '--nfp-play-color:' . $colors['playButton'];
+            $styles[] = '--nfp-play-contrast:' . $this->contrast_color($colors['playButton']);
+        }
+
+        if (!empty($colors['volume'])) {
+            $styles[] = '--nfp-volume-color:' . $colors['volume'];
+        }
+
+        return implode(';', $styles);
+    }
+
+    private function contrast_color($hex_color)
+    {
+        $hex_color = ltrim((string) $hex_color, '#');
+        if (strlen($hex_color) !== 6) {
+            return '#ffffff';
+        }
+
+        $red = hexdec(substr($hex_color, 0, 2));
+        $green = hexdec(substr($hex_color, 2, 2));
+        $blue = hexdec(substr($hex_color, 4, 2));
+        $luminance = (($red * 299) + ($green * 587) + ($blue * 114)) / 1000;
+
+        return $luminance > 150 ? '#061006' : '#ffffff';
     }
 
     public function render_shortcode($atts = [])
@@ -265,6 +410,9 @@ final class Net_Fm_Player_Plugin
                 'fallback_art' => $defaults['fallback_art'],
                 'station_label' => $defaults['station_label'],
                 'theme' => $defaults['theme'],
+                'background_color' => $defaults['background_color'],
+                'play_button_color' => $defaults['play_button_color'],
+                'volume_color' => $defaults['volume_color'],
             ],
             $atts,
             self::SHORTCODE
@@ -282,16 +430,38 @@ final class Net_Fm_Player_Plugin
         $config = $this->build_player_config($atts);
         $config_json = wp_json_encode($config);
         $has_streams = !empty($config['streams']['primary']) || !empty($config['streams']['secondary']);
+        $root_classes = ['nfp', 'nfp--theme-' . $config['theme']];
+        $initial_live_label = __('Проверка эфира...', 'net-fm-player');
+        $initial_count_label = $config['stationLabel'];
+        $initial_title = __('Загрузка метаданных...', 'net-fm-player');
+        $initial_artist = '';
+
+        if (!$config['apiUrl']) {
+            if ($has_streams) {
+                $root_classes[] = 'is-live';
+                $initial_live_label = sprintf(__('В эфире %s', 'net-fm-player'), $config['stationLabel']);
+                $initial_count_label = '';
+                $initial_title = $config['stationLabel'];
+                $initial_artist = __('Прямой поток', 'net-fm-player');
+            } else {
+                $root_classes[] = 'is-offline';
+                $initial_live_label = sprintf(__('Не настроено: %s', 'net-fm-player'), $config['stationLabel']);
+                $initial_count_label = '';
+                $initial_title = $config['stationLabel'];
+            }
+        }
+
+        $player_style = $this->build_player_style($config['colors']);
 
         ob_start();
         ?>
-        <div class="nfp nfp--theme-<?php echo esc_attr($config['theme']); ?>" data-nfp data-config="<?php echo esc_attr($config_json); ?>">
+        <div class="<?php echo esc_attr(implode(' ', $root_classes)); ?>" data-nfp data-config="<?php echo esc_attr($config_json); ?>"<?php echo $player_style ? ' style="' . esc_attr($player_style) . '"' : ''; ?>>
             <div class="nfp__head">
-                <span class="nfp__live" data-nfp-live role="status" aria-live="polite"><?php echo esc_html__('В эфире', 'net-fm-player'); ?></span>
-                <span class="nfp__count" data-nfp-count><?php echo esc_html($config['stationLabel']); ?></span>
+                <span class="nfp__live" data-nfp-live role="status" aria-live="polite"><?php echo esc_html($initial_live_label); ?></span>
+                <span class="nfp__count" data-nfp-count><?php echo esc_html($initial_count_label); ?></span>
             </div>
 
-            <div class="nfp__cover <?php echo $config['fallbackArt'] ? '' : 'is-placeholder'; ?>" data-nfp-cover>
+            <div class="nfp__cover <?php echo $config['fallbackArt'] ? 'is-fallback-art' : 'is-placeholder'; ?>" data-nfp-cover>
                 <img class="nfp__art" data-nfp-art <?php echo $config['fallbackArt'] ? 'src="' . esc_url($config['fallbackArt']) . '"' : ''; ?> alt="" loading="eager">
                 <div class="nfp__placeholder" data-nfp-placeholder><?php echo esc_html($config['stationLabel']); ?></div>
                 <canvas class="nfp__scope" data-nfp-scope width="640" height="160" aria-hidden="true"></canvas>
@@ -302,12 +472,14 @@ final class Net_Fm_Player_Plugin
                 </div>
                 <div class="nfp__eq-note" data-nfp-eq-note hidden><?php echo esc_html__('Визуализация эфира', 'net-fm-player'); ?></div>
             </div>
-            <div class="nfp__vinyl-arm" aria-hidden="true"><span class="nfp__vinyl-head"></span></div>
+            <div class="nfp__vinyl-arm" aria-hidden="true">
+                <span class="nfp__vinyl-arm-body"><span class="nfp__vinyl-head"></span></span>
+            </div>
 
             <div class="nfp__info">
                 <div class="nfp__kicker"><?php echo esc_html__('Сейчас играет', 'net-fm-player'); ?></div>
-                <div class="nfp__title" data-nfp-title><?php echo esc_html__('Загрузка эфира...', 'net-fm-player'); ?></div>
-                <div class="nfp__artist" data-nfp-artist><?php echo esc_html($config['stationLabel']); ?></div>
+                <div class="nfp__title" data-nfp-title><?php echo esc_html($initial_title); ?></div>
+                <div class="nfp__artist" data-nfp-artist><?php echo esc_html($initial_artist); ?></div>
             </div>
 
             <div class="nfp__panel">
@@ -336,11 +508,6 @@ final class Net_Fm_Player_Plugin
             <div class="nfp__volume">
                 <span class="nfp__volume-label"><?php echo esc_html__('Громкость', 'net-fm-player'); ?></span>
                 <input class="nfp__volume-range" data-nfp-volume type="range" min="0" max="1" step="0.01" value="0.85" aria-label="<?php echo esc_attr__('Громкость', 'net-fm-player'); ?>">
-            </div>
-
-            <div class="nfp__reactions" role="group" aria-label="<?php echo esc_attr__('Оценка трека', 'net-fm-player'); ?>">
-                <button class="nfp__reaction" type="button" data-nfp-reaction="like" aria-pressed="false"><span class="nfp__reaction-icon nfp__reaction-icon--like" aria-hidden="true"></span><span><?php echo esc_html__('Лайк', 'net-fm-player'); ?></span></button>
-                <button class="nfp__reaction" type="button" data-nfp-reaction="dislike" aria-pressed="false"><span class="nfp__reaction-icon nfp__reaction-icon--dislike" aria-hidden="true"></span><span><?php echo esc_html__('Дизлайк', 'net-fm-player'); ?></span></button>
             </div>
 
             <div class="nfp__error" data-nfp-error role="alert" hidden><?php echo esc_html__('Поток не запустился. Нажмите play еще раз или переключите поток.', 'net-fm-player'); ?></div>
