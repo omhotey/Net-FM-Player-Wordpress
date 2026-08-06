@@ -1,0 +1,27 @@
+# Normalize repository text files on every platform.
+* text=auto eol=lf
+
+# Keep binary assets untouched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.mp3 binary
+*.ogg binary
+*.wav binary
+*.zip binary
+
+# Keep development tooling and project documentation out of release archives.
+/.kilo export-ignore
+/.vscode export-ignore
+/preview export-ignore
+/AGENTS.md export-ignore
+/kilo.json export-ignore
+/PRD.md export-ignore
+/ROADMAP.md export-ignore

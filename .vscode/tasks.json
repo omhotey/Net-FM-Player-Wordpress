@@ -1,0 +1,21 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "NET FM Player: Start preview",
+      "type": "shell",
+      "command": "php",
+      "args": ["-S", "127.0.0.1:8080", "-t", "."],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "net-fm-player-preview",
+        "pattern": [{"regexp": "^$", "file": 1, "location": 2, "message": 3}],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "Development Server.*started",
+          "endsPattern": "^$"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# Dependency directories
+/node_modules/
+/vendor/
+
+# Package manager diagnostics
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+composer.phar
+
+# Test and coverage artifacts
+/coverage/
+/build/
+/dist/
+/.phpunit.result.cache
+/phpunit.xml
+
+# Local runtime configuration and credentials
+/.env
+/.env.*
+!/.env.example
+
+# Local IDE and editor settings
+/.idea/
+/.vscode/*
+!/.vscode/extensions.json
+!/.vscode/settings.json
+!/.vscode/tasks.json
+*.code-workspace
+*.sublime-workspace
+*.sublime-project
+
+# Kilo Agent Manager runtime state
+/.kilo/agent-manager.json
+/.kilo/worktrees/
+
+# Local browser-preview artifacts
+/.playwright-mcp/
+/*-preview*.png
+/vinyl-*.png
+/mute-icon.png
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Plugin packages generated for distribution
+/*.zip
