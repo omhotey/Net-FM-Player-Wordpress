@@ -1,6 +1,12 @@
 {
   "$schema": "https://app.kilo.ai/config.json",
   "instructions": ["AGENTS.md"],
-  "snapshot": true,
-  "share": "manual"
+  "snapshot": false,
+  "share": "manual",
+  "indexing": {
+    "enabled": false
+  },
+  "watcher": {
+    "ignore": ["**/*.mp4"]
+  }
 }

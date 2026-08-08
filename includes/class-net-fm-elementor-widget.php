@@ -129,6 +129,14 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             'condition' => $condition,
         ]);
 
+        $this->add_control('stream_hls_url', [
+            'label' => __('HLS Auto stream URL', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::TEXT,
+            'default' => $defaults['stream_hls_url'] ?? '',
+            'description' => __('Optional adaptive HLS stream. It is shown only in browsers with native HLS playback.', 'net-fm-player'),
+            'condition' => $condition,
+        ]);
+
         $this->add_control('default_stream', [
             'label' => __('Default stream', 'net-fm-player'),
             'type' => \Elementor\Controls_Manager::SELECT,
@@ -136,6 +144,7 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             'options' => [
                 'primary' => __('Primary', 'net-fm-player'),
                 'secondary' => __('Secondary', 'net-fm-player'),
+                'hls' => __('Auto (HLS)', 'net-fm-player'),
             ],
             'condition' => $condition,
         ]);
@@ -208,7 +217,7 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
         }
 
         echo do_shortcode(sprintf(
-            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" default_stream="%s" fallback_art="%s" theme="%s" background_color="%s" play_button_color="%s" volume_color="%s"]',
+            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" stream_hls_url="%s" default_stream="%s" fallback_art="%s" theme="%s" background_color="%s" play_button_color="%s" volume_color="%s"]',
             esc_attr($settings['station_label'] ?? ''),
             esc_url($settings['azuracast_base_url'] ?? ''),
             esc_attr($settings['station_shortcode'] ?? ''),
@@ -217,6 +226,7 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             esc_attr($settings['stream_primary_label'] ?? ''),
             esc_url($settings['stream_secondary_url'] ?? ''),
             esc_attr($settings['stream_secondary_label'] ?? ''),
+            esc_url($settings['stream_hls_url'] ?? ''),
             esc_attr($settings['default_stream'] ?? 'primary'),
             esc_url($fallback_art),
             esc_attr($settings['theme'] ?? 'studio'),

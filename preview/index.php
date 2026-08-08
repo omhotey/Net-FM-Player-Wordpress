@@ -26,12 +26,18 @@ function did_action($hook) { return false; }
 function shortcode_atts($pairs, $atts) { return array_merge($pairs, array_intersect_key((array) $atts, $pairs)); }
 function disabled($condition, $current = true, $display = true) { if ($condition === $current && $display) { echo ' disabled'; } }
 
-if (isset($_GET['api']) && in_array($_GET['api'], ['ending', 'cycle', 'delay'], true)) {
-    $is_cycle = $_GET['api'] === 'cycle';
+if (isset($_GET['api']) && in_array($_GET['api'], ['ending', 'cycle', 'delay', 'lag'], true)) {
+    $is_cycle = in_array($_GET['api'], ['cycle', 'lag'], true);
+    $is_lag = $_GET['api'] === 'lag';
     $is_delay = $_GET['api'] === 'delay';
     $cycle_length = 20;
     $cycle_number = $is_cycle ? intdiv(time(), $cycle_length) : 0;
-    $elapsed = $is_cycle ? time() % $cycle_length : 168;
+    $cycle_phase = $is_cycle ? time() % $cycle_length : 0;
+    $elapsed = $is_cycle ? $cycle_phase : 168;
+    if ($is_lag) {
+        $cycle_number -= $cycle_phase < 10 ? 1 : 0;
+        $elapsed = $cycle_phase < 10 ? min($cycle_length, 12 + $cycle_phase) : $cycle_phase - 10;
+    }
     if ($is_delay) {
         sleep(8);
         $elapsed = 30;
@@ -54,6 +60,14 @@ if (isset($_GET['api']) && in_array($_GET['api'], ['ending', 'cycle', 'delay'], 
                 'art' => '/preview/station-logo.svg?album=' . ($is_cycle ? $cycle_number : 1),
             ],
         ],
+        'playing_next' => [
+            'song' => [
+                'id' => $is_cycle ? 'preview-cycle-' . ($cycle_number + 1) : 'preview-next-track',
+                'title' => $is_cycle ? 'Тестовый трек ' . ($cycle_number + 1) : 'Следующий тестовый трек',
+                'artist' => 'Preview Artist',
+                'art' => '/preview/station-logo.svg?album=' . ($is_cycle ? ($cycle_number + 1) : 2),
+            ],
+        ],
     ]);
     exit;
 }
@@ -63,7 +77,8 @@ require_once dirname(__DIR__) . '/net-fm-player.php';
 $player = Net_Fm_Player_Plugin::instance();
 $theme = (isset($_GET['theme']) && $_GET['theme'] === 'vinyl') ? 'vinyl' : 'studio';
 $direct = isset($_GET['direct']) && $_GET['direct'] === '1';
-$fixture = isset($_GET['fixture']) && in_array($_GET['fixture'], ['ending', 'cycle', 'delay'], true) ? $_GET['fixture'] : '';
+$hls = isset($_GET['hls']) && $_GET['hls'] === '1';
+$fixture = isset($_GET['fixture']) && in_array($_GET['fixture'], ['ending', 'cycle', 'delay', 'lag'], true) ? $_GET['fixture'] : '';
 $has_fixture = $fixture !== '';
 $custom_colors = isset($_GET['custom']) && $_GET['custom'] === '1';
 $markup = $player->render_shortcode([
@@ -76,6 +91,7 @@ $markup = $player->render_shortcode([
     'stream_primary_label' => '128 kbps',
     'stream_secondary' => 'https://stream.net-fm.ru/listen/upwaveradio/stream320',
     'stream_secondary_label' => '320 kbps',
+    'stream_hls_url' => $hls ? 'https://stream.net-fm.ru/listen/upwaveradio/hls.m3u8' : '',
     'fallback_art' => '/preview/station-logo.svg',
     'theme' => $theme,
     'background_color' => $custom_colors ? '#16213e' : '',
