@@ -55,6 +55,17 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             ]
         );
 
+        $this->add_control('station', [
+            'label' => __('Station ID', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::TEXT,
+            'description' => __('Copy the ID from NET FM Player settings.', 'net-fm-player'),
+        ]);
+        $this->add_control('stations', [
+            'label' => __('Station IDs for selector', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::TEXT,
+            'description' => __('Enter all for all saved stations, or separate station IDs with commas. Overrides the single station ID.', 'net-fm-player'),
+        ]);
+
         $this->add_control(
             'use_global_settings',
             [
@@ -162,10 +173,21 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
         $this->add_control('theme', [
             'label' => __('Player theme', 'net-fm-player'),
             'type' => \Elementor\Controls_Manager::SELECT,
-            'default' => $defaults['theme'] ?? 'studio',
+            'default' => $defaults['theme'] ?? 'vinyl',
             'options' => [
                 'studio' => __('Studio', 'net-fm-player'),
                 'vinyl' => __('Vinyl', 'net-fm-player'),
+            ],
+            'condition' => $condition,
+        ]);
+
+        $this->add_control('layout', [
+            'label' => __('Player version', 'net-fm-player'),
+            'type' => \Elementor\Controls_Manager::SELECT,
+            'default' => $defaults['layout'] ?? 'horizontal',
+            'options' => [
+                'horizontal' => __('Horizontal', 'net-fm-player'),
+                'vertical' => __('Vertical', 'net-fm-player'),
             ],
             'condition' => $condition,
         ]);
@@ -206,6 +228,25 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
     {
         $settings = $this->get_settings_for_display();
 
+        if (!empty($settings['stations']) || !empty($settings['station'])) {
+            $appearance = '';
+            if (($settings['use_global_settings'] ?? 'yes') !== 'yes') {
+                $appearance = sprintf(' theme="%s" layout="%s" background_color="%s" play_button_color="%s" volume_color="%s"',
+                    esc_attr($settings['theme'] ?? 'vinyl'),
+                    esc_attr($settings['layout'] ?? 'horizontal'),
+                    esc_attr($settings['background_color'] ?? ''),
+                    esc_attr($settings['play_button_color'] ?? ''),
+                    esc_attr($settings['volume_color'] ?? '')
+                );
+            }
+            echo do_shortcode(sprintf('[net_fm_player station="%s" stations="%s"%s]',
+                esc_attr($settings['station'] ?? ''),
+                esc_attr($settings['stations'] ?? ''),
+                $appearance
+            ));
+            return;
+        }
+
         if (($settings['use_global_settings'] ?? 'yes') === 'yes') {
             echo do_shortcode('[net_fm_player]');
             return;
@@ -217,7 +258,7 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
         }
 
         echo do_shortcode(sprintf(
-            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" stream_hls_url="%s" default_stream="%s" fallback_art="%s" theme="%s" background_color="%s" play_button_color="%s" volume_color="%s"]',
+            '[net_fm_player use_global="no" station_label="%s" azuracast_base_url="%s" station_shortcode="%s" api_url="%s" stream_primary="%s" stream_primary_label="%s" stream_secondary="%s" stream_secondary_label="%s" stream_hls_url="%s" default_stream="%s" fallback_art="%s" theme="%s" layout="%s" background_color="%s" play_button_color="%s" volume_color="%s"]',
             esc_attr($settings['station_label'] ?? ''),
             esc_url($settings['azuracast_base_url'] ?? ''),
             esc_attr($settings['station_shortcode'] ?? ''),
@@ -229,7 +270,8 @@ class Net_Fm_Player_Elementor_Widget extends \Elementor\Widget_Base
             esc_url($settings['stream_hls_url'] ?? ''),
             esc_attr($settings['default_stream'] ?? 'primary'),
             esc_url($fallback_art),
-            esc_attr($settings['theme'] ?? 'studio'),
+            esc_attr($settings['theme'] ?? 'vinyl'),
+            esc_attr($settings['layout'] ?? 'horizontal'),
             esc_attr($settings['background_color'] ?? ''),
             esc_attr($settings['play_button_color'] ?? ''),
             esc_attr($settings['volume_color'] ?? '')

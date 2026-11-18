@@ -1,0 +1,68 @@
+.nfp-admin-stations {
+  max-width: 1180px;
+  margin-top: 32px;
+}
+.nfp-admin-stations > p {
+  max-width: 76ch;
+  color: #50575e;
+}
+.nfp-admin-station-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr));
+  gap: 18px;
+  align-items: start;
+  margin: 20px 0;
+}
+.nfp-admin-station-card {
+  min-width: 0;
+  margin: 0;
+  padding: 20px;
+  border: 1px solid #c3c4c7;
+  border-radius: 8px;
+  background: #fff;
+}
+.nfp-admin-station-card legend {
+  padding: 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.nfp-admin-station-id {
+  margin: 0 0 14px;
+  color: #646970;
+  overflow-wrap: anywhere;
+}
+.nfp-admin-station-toggle {
+  display: block;
+  padding: 12px;
+  border-radius: 5px;
+  background: #f0f6fc;
+  font-weight: 600;
+}
+.nfp-admin-station-field label {
+  display: block;
+  font-weight: 500;
+}
+.nfp-admin-station-field input.regular-text {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 5px;
+}
+.nfp-admin-station-delete {
+  display: block;
+  padding-top: 12px;
+  border-top: 1px solid #dcdcde;
+  color: #8a2424;
+}
+.nfp-admin-global {
+  max-width: 1180px;
+  margin-top: 24px;
+  padding: 16px 20px;
+  border: 1px solid #c3c4c7;
+  border-radius: 8px;
+  background: #fff;
+}
+.nfp-admin-global summary {
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}

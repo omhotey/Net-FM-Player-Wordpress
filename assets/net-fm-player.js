@@ -2,12 +2,15 @@
   var REFRESH_MS = 15000;
   var RECONNECT_DELAY_MS = 1800;
   var MAX_RECONNECTS = 3;
-  var TONEARM_START_ANGLE = 4;
-  var TONEARM_END_ANGLE = 19;
-  var TONEARM_REST_ANGLE = 12;
+  var TONEARM_START_ANGLE = 87;
+  var TONEARM_END_ANGLE = 108;
+  var TONEARM_REST_ANGLE = 76;
   var TRACK_CHANGE_LEAD_SECONDS = 4;
   var TONEARM_RETURN_LEAD_SECONDS = 0.55;
   var TRACK_CHANGE_DURATION_MS = 520;
+  var TONEARM_SYNC_TOLERANCE_SECONDS = 2;
+  var TONEARM_MAX_CATCHUP_RATE = 0.12;
+  var STALE_PREVIOUS_TRACK_GRACE_MS = 30000;
   var activePlayers = [];
   var removalObserver = null;
 
@@ -21,7 +24,8 @@
       defaultStream: 'primary',
       fallbackArt: '',
       stationLabel: 'NET FM',
-      theme: 'studio'
+      stationLabelOverride: false,
+      theme: 'vinyl'
     };
 
     try {
@@ -46,6 +50,7 @@
         defaultStream: parsed.defaultStream === 'secondary' || parsed.defaultStream === 'hls' ? parsed.defaultStream : 'primary',
         fallbackArt: parsed.fallbackArt || defaults.fallbackArt,
         stationLabel: parsed.stationLabel || defaults.stationLabel,
+        stationLabelOverride: parsed.stationLabelOverride === true,
         theme: parsed.theme === 'vinyl' ? 'vinyl' : defaults.theme
       };
     } catch (error) {
@@ -85,6 +90,7 @@
     var config = parseConfig(root);
     var streamKey = config.defaultStream;
     var reconnects = 0;
+    var fallbackAttempted = false;
     var reconnectTimer = null;
     var bufferingTimer = null;
     var stalledTimer = null;
@@ -96,6 +102,7 @@
     var visualizerFrame = null;
     var analyserUnavailable = false;
     var currentArt = '';
+    var stationLogoAvailable = Boolean(config.fallbackArt);
     var pendingArt = '';
     var failedArtUrls = {};
     var activeCoverLoad = null;
@@ -109,9 +116,16 @@
     var hasMetadata = false;
     var trackElapsed = 0;
     var trackDuration = 0;
-    var trackSyncedAt = 0;
+    var tonearmCatchupRemaining = 0;
+    var tonearmFrameAt = 0;
+    var tonearmClockInitialized = false;
+    var tonearmClockRunning = false;
+    var tonearmFrame = null;
+    var tonearmLastBaseAngle = TONEARM_START_ANGLE;
     var currentTrackKey = '';
     var pendingTrackKey = '';
+    var previousTrackKey = '';
+    var ignorePreviousTrackUntil = 0;
     var nextTrackCache = { key: '', coverSrc: '', ready: false };
     var trackChangeActive = false;
     var trackEndReached = false;
@@ -141,15 +155,18 @@
     var mute = root.querySelector('[data-nfp-mute]');
     var volume = root.querySelector('[data-nfp-volume]');
     var cover = root.querySelector('[data-nfp-cover]');
+    var stationArt = root.querySelector('[data-nfp-station-art]');
     var art = root.querySelector('[data-nfp-art]');
     var placeholder = root.querySelector('[data-nfp-placeholder]');
     var placeholderName = root.querySelector('[data-nfp-placeholder-name]');
     var title = root.querySelector('[data-nfp-title]');
     var artist = root.querySelector('[data-nfp-artist]');
+    var accessibleTrack = root.querySelector('[data-nfp-track-accessible]');
     var stationLabel = root.querySelector('[data-nfp-station-label]');
     var live = root.querySelector('[data-nfp-live]');
     var count = root.querySelector('[data-nfp-count]');
     var error = root.querySelector('[data-nfp-error]');
+    var status = root.querySelector('[data-nfp-status]');
     var eqNote = root.querySelector('[data-nfp-eq-note]');
     var eqBars = root.querySelectorAll('.nfp__eq i');
     var streamButtons = root.querySelectorAll('[data-nfp-stream]');
@@ -164,7 +181,8 @@
     audio.volume = volume ? Number(volume.value || 0.85) : 0.85;
 
     function selectedStream() {
-      return config.streams[streamKey] || config.streams.primary || config.streams.secondary || config.streams.hls;
+      if (streamKey === 'hls' && !supportsNativeHls()) return '';
+      return config.streams[streamKey] || config.streams.primary || config.streams.secondary || (supportsNativeHls() ? config.streams.hls : '');
     }
 
     function supportsNativeHls() {
@@ -182,7 +200,6 @@
     function updateResponsiveState() {
       if (destroyed) return;
       var width = root.getBoundingClientRect().width;
-      root.classList.toggle('is-compact', width <= 700);
       root.classList.toggle('is-narrow', width <= 420);
     }
 
@@ -223,6 +240,8 @@
         }
       }
       root.classList.toggle('is-playing', value);
+      if (value) resumeTonearmClock();
+      else pauseTonearmClock();
       toggle.setAttribute('aria-label', value ? 'Остановить радио' : 'Включить радио');
       if (value) startVisualizer();
       else stopVisualizer(false);
@@ -269,6 +288,16 @@
       stalledTimer = null;
     }
 
+    function scheduleStreamRecovery(delay) {
+      if (audio.paused || !playRequested || stalledTimer) return;
+      var stalledStream = audio.currentSrc;
+      stalledTimer = window.setTimeout(function () {
+        stalledTimer = null;
+        if (!playRequested || audio.paused || audio.currentSrc !== stalledStream) return;
+        if (audio.readyState < 3) reconnect();
+      }, Math.max(2500, delay || 6500));
+    }
+
     function clearReconnectTimer() {
       if (!reconnectTimer) return;
       window.clearTimeout(reconnectTimer);
@@ -284,6 +313,7 @@
       reconnects = 0;
       clearStalledTimer();
       showError(false);
+      if (fallbackAttempted) showStatus('Используется резервный поток.');
       setPlaying(true);
       setBuffering(false);
     }
@@ -294,18 +324,22 @@
       error.hidden = !value;
     }
 
+    function showStatus(message) {
+      if (!status) return;
+      status.textContent = message || '';
+      status.hidden = !message;
+    }
+
     function applyCover(src) {
       currentArt = src || '';
       if (src) {
         art.src = src;
         art.hidden = false;
         cover.classList.remove('is-placeholder');
-        cover.classList.toggle('is-fallback-art', Boolean(config.fallbackArt && src === config.fallbackArt));
       } else {
         art.removeAttribute('src');
         art.hidden = true;
-        cover.classList.add('is-placeholder');
-        cover.classList.remove('is-fallback-art');
+        cover.classList.toggle('is-placeholder', !stationLogoAvailable);
         setStationPlaceholderName();
       }
     }
@@ -334,9 +368,7 @@
 
     function preloadCover(src) {
       if (!art || !cover) return Promise.resolve('');
-      if (src && failedArtUrls[src]) {
-        src = src === config.fallbackArt ? '' : config.fallbackArt;
-      }
+      if (src && failedArtUrls[src]) return Promise.resolve('');
       if (!src || src === currentArt) return Promise.resolve(src || '');
 
       return new Promise(function (resolve) {
@@ -346,18 +378,14 @@
         };
         loader.onerror = function () {
           failedArtUrls[src] = true;
-          if (src !== config.fallbackArt && config.fallbackArt) {
-            preloadCover(config.fallbackArt).then(resolve);
-          } else {
-            resolve('');
-          }
+          resolve('');
         };
         loader.src = src;
       });
     }
 
     function preloadCoverWithTimeout(src, timeout) {
-      var fallback = config.fallbackArt || currentArt || '';
+      var fallback = '';
       var finalCover = preloadCover(src);
       var timeoutId = null;
       var resolveInitial = null;
@@ -389,9 +417,6 @@
 
     function setCover(src) {
       if (!art || !cover) return;
-      if (src && failedArtUrls[src]) {
-        src = src === config.fallbackArt ? '' : config.fallbackArt;
-      }
       if (src === currentArt || src === pendingArt) return;
 
       if (!src) {
@@ -438,23 +463,31 @@
       }, transitionDuration);
     }
 
-    function showStationPlaceholder() {
+    function showStationPlaceholder(generation) {
       if (!cover || !art) return Promise.resolve();
       if (placeholderReadyPromise) return placeholderReadyPromise;
       pendingArt = '';
       root.classList.add('is-track-pending');
-      cover.classList.add('is-placeholder-revealing');
       setStationPlaceholderName();
+
+      if (stationLogoAvailable) {
+        applyCover('');
+        return Promise.resolve();
+      }
+
+      cover.classList.add('is-placeholder-revealing');
 
       placeholderReadyPromise = new Promise(function (resolve) {
         var applyPlaceholder = function () {
           placeholderTimer = null;
-          if (destroyed || !trackEndReached) {
+          if (destroyed || generation !== trackTransitionId) {
             placeholderReadyPromise = null;
             resolve();
             return;
           }
-          applyCover('');
+          // A configured station logo is the transition state. The generic
+          // placeholder is reserved for installations without a usable logo.
+          applyCover(config.fallbackArt);
           cover.classList.remove('is-placeholder-revealing');
           if (placeholderFadeAnimation) {
             placeholderFadeAnimation.cancel();
@@ -666,6 +699,7 @@
 
     function revealTrackMetadata(nextTitle, nextArtist) {
       clearMetadataAnimation();
+      updateAccessibleTrack(nextTitle, nextArtist);
       root.classList.remove('is-metadata-loading-copy');
       root.classList.add('is-metadata-revealing');
       if (reduceMotion) {
@@ -702,6 +736,12 @@
       }, longestDelay + 460);
     }
 
+    function updateAccessibleTrack(nextTitle, nextArtist) {
+      if (!accessibleTrack) return;
+      var text = [nextTitle, nextArtist].filter(Boolean).join(' — ');
+      if (accessibleTrack.textContent !== text) accessibleTrack.textContent = text;
+    }
+
     function commitInitialMetadata(payload) {
       initialMetadataRevealTimer = null;
       if (destroyed) return;
@@ -716,6 +756,7 @@
         : 0;
 
       currentTrackKey = payload.key;
+      syncTonearm(payload.nowPlaying);
       if (pendingDuration > 0 && !reduceMotion) {
         if (initialMetadataRevealTimer) window.clearTimeout(initialMetadataRevealTimer);
         initialMetadataRevealTimer = window.setTimeout(function () {
@@ -728,8 +769,76 @@
     }
 
     function setTonearmAngle(angle) {
-      var safeAngle = Math.max(TONEARM_START_ANGLE, Math.min(TONEARM_END_ANGLE, Number(angle) || TONEARM_REST_ANGLE));
+      var requestedAngle = Number(angle);
+      var safeAngle = Math.max(TONEARM_START_ANGLE, Math.min(TONEARM_END_ANGLE, Number.isFinite(requestedAngle) ? requestedAngle : TONEARM_REST_ANGLE));
+      tonearmLastBaseAngle = Math.max(tonearmLastBaseAngle, safeAngle);
       root.style.setProperty('--nfp-tonearm-angle', safeAngle.toFixed(2) + 'deg');
+    }
+
+    function stopTonearmAnimation() {
+      if (!tonearmFrame) return;
+      window.cancelAnimationFrame(tonearmFrame);
+      tonearmFrame = null;
+    }
+
+    function resetTonearmClock() {
+      stopTonearmAnimation();
+      tonearmClockInitialized = false;
+      tonearmClockRunning = false;
+      trackElapsed = 0;
+      trackDuration = 0;
+      tonearmCatchupRemaining = 0;
+      tonearmFrameAt = 0;
+      tonearmLastBaseAngle = TONEARM_START_ANGLE;
+      setTonearmAngle(TONEARM_START_ANGLE);
+    }
+
+    function updateTonearmFrame(now) {
+      tonearmFrame = null;
+      if (destroyed || !tonearmClockRunning || trackChangeActive || !(trackDuration > 0)) return;
+
+      if (tonearmFrameAt > 0) {
+        var frameSeconds = Math.max(0, now - tonearmFrameAt) / 1000;
+        var catchupStep = Math.min(tonearmCatchupRemaining, frameSeconds * TONEARM_MAX_CATCHUP_RATE);
+        tonearmCatchupRemaining -= catchupStep;
+        trackElapsed = Math.min(trackDuration, trackElapsed + frameSeconds + catchupStep);
+      }
+      tonearmFrameAt = now;
+
+      var remaining = Math.max(0, trackDuration - trackElapsed);
+      var progress = Math.max(0, Math.min(1, trackElapsed / trackDuration));
+      var nextAngle = TONEARM_START_ANGLE + ((TONEARM_END_ANGLE - TONEARM_START_ANGLE) * progress);
+
+      setTonearmAngle(Math.max(tonearmLastBaseAngle, nextAngle));
+
+      if (remaining <= TRACK_CHANGE_LEAD_SECONDS) {
+        startBoundaryPolling();
+        scheduleEndOfTrackTransition(remaining);
+        if (remaining <= 0) beginEndOfTrackTransition();
+      }
+
+      if (!trackEndReached && tonearmClockRunning) {
+        tonearmFrame = window.requestAnimationFrame(updateTonearmFrame);
+      }
+    }
+
+    function startTonearmAnimation() {
+      if (tonearmFrame || !tonearmClockRunning || trackChangeActive || !(trackDuration > 0)) return;
+      tonearmFrame = window.requestAnimationFrame(updateTonearmFrame);
+    }
+
+    function resumeTonearmClock() {
+      if (!tonearmClockInitialized || !(trackDuration > 0)) return;
+      tonearmClockRunning = true;
+      tonearmFrameAt = performance.now();
+      startTonearmAnimation();
+    }
+
+    function pauseTonearmClock() {
+      if (!tonearmClockRunning) return;
+      tonearmFrameAt = 0;
+      tonearmClockRunning = false;
+      stopTonearmAnimation();
     }
 
     function stopBoundaryPolling() {
@@ -781,7 +890,7 @@
 
       nextTrackCache = { key: nextKey, coverSrc: '', ready: false };
       var expectedKey = nextKey;
-      preloadCover((nextSong && nextSong.art) || config.fallbackArt).then(function (coverSrc) {
+      preloadCover(nextSong && nextSong.art).then(function (coverSrc) {
         if (destroyed || nextTrackCache.key !== expectedKey) return;
         nextTrackCache.coverSrc = coverSrc;
         nextTrackCache.ready = true;
@@ -802,6 +911,8 @@
     function returnTonearmToStart() {
       if (trackChangeActive || config.theme !== 'vinyl' || reduceMotion) return;
       trackChangeActive = true;
+      stopTonearmAnimation();
+      tonearmLastBaseAngle = TONEARM_START_ANGLE;
       root.classList.add('is-track-changing');
       setTonearmAngle(TONEARM_START_ANGLE);
     }
@@ -826,7 +937,7 @@
         tonearmReturnTimer = null;
       }
       returnTonearmToStart();
-      showStationPlaceholder();
+      showStationPlaceholder(trackTransitionId);
       startMetadataScramble();
       if (queuedTrackPayload) beginTrackTransition(queuedTrackPayload);
     }
@@ -850,6 +961,8 @@
 
     function commitTrackTransition(transitionId, payload, coverSrc) {
       if (destroyed || transitionId !== trackTransitionId) return;
+      previousTrackKey = currentTrackKey;
+      ignorePreviousTrackUntil = previousTrackKey ? Date.now() + STALE_PREVIOUS_TRACK_GRACE_MS : 0;
       currentTrackKey = payload.key;
       pendingTrackKey = '';
       queuedTrackPayload = null;
@@ -894,71 +1007,39 @@
         window.clearTimeout(trackTransitionTimer);
         trackTransitionTimer = null;
       }
+      if (placeholderTimer) {
+        window.clearTimeout(placeholderTimer);
+        placeholderTimer = null;
+      }
+      if (placeholderFadeAnimation) {
+        placeholderFadeAnimation.cancel();
+        placeholderFadeAnimation = null;
+      }
+      placeholderReadyPromise = null;
+      // A generation owns every visible transition write. Reset mechanics and
+      // remove old art before waiting for the new artwork request.
+      trackChangeActive = true;
+      root.classList.add('is-track-changing');
+      resetTonearmClock();
+      startMetadataScramble();
+      var placeholderReady = showStationPlaceholder(transitionId);
       var coverLoad = getCoverLoad(payload);
       activeCoverLoad = coverLoad;
-      Promise.all([coverLoad.initial, placeholderReadyPromise || Promise.resolve(), metadataTransitionReadyPromise || Promise.resolve()]).then(function (results) {
+
+      Promise.all([coverLoad.initial, placeholderReady, metadataTransitionReadyPromise || Promise.resolve()]).then(function (results) {
         var coverSrc = results[0];
         if (destroyed || transitionId !== trackTransitionId) return;
         activeCoverLoad = null;
-
-        var shouldMoveTonearm = config.theme === 'vinyl' && !reduceMotion;
-        coverLoad.final.then(function (finalCoverSrc) {
-          if (!finalCoverSrc || finalCoverSrc === coverSrc || destroyed || transitionId !== trackTransitionId) return;
-
-          var applyLateCover = function () {
-            lateArtTimer = null;
-            if (destroyed || transitionId !== trackTransitionId || currentTrackKey !== payload.key) return;
-            revealCover(finalCoverSrc, 360);
-          };
-
-          if (trackChangeActive) {
-            lateArtTimer = window.setTimeout(applyLateCover, TRACK_CHANGE_DURATION_MS);
-          } else {
-            applyLateCover();
-          }
-        });
-
-        if (shouldMoveTonearm) {
-          returnTonearmToStart();
-        }
-
         commitTrackTransition(transitionId, payload, coverSrc);
-        if (shouldMoveTonearm) {
-          trackTransitionTimer = window.setTimeout(function () {
-            trackTransitionTimer = null;
-            finishTrackTransition(transitionId, payload);
-          }, TRACK_CHANGE_DURATION_MS);
-        } else {
-          finishTrackTransition(transitionId, payload);
-        }
+        finishTrackTransition(transitionId, payload);
+
+        // A slow artwork request must not keep the player in transition.
+        // The station logo remains until this generation's final image arrives.
+        coverLoad.final.then(function (finalCoverSrc) {
+          if (!finalCoverSrc || finalCoverSrc === coverSrc || destroyed || transitionId !== trackTransitionId || currentTrackKey !== payload.key) return;
+          revealCover(finalCoverSrc, 360);
+        });
       });
-    }
-
-    function updateTonearm() {
-      if (trackChangeActive) return;
-      if (!(trackDuration > 0)) {
-        if (config.theme === 'vinyl') setTonearmAngle(TONEARM_START_ANGLE);
-        return;
-      }
-
-      var elapsed = trackElapsed;
-      if (trackSyncedAt > 0) {
-        elapsed += Math.max(0, (Date.now() - trackSyncedAt) / 1000);
-      }
-      var remaining = Math.max(0, trackDuration - elapsed);
-      if (remaining <= TRACK_CHANGE_LEAD_SECONDS) {
-        startBoundaryPolling();
-        scheduleTonearmReturn(remaining);
-        scheduleEndOfTrackTransition(remaining);
-        if (remaining <= 0) beginEndOfTrackTransition();
-      }
-
-      if (trackEndReached) return;
-
-      var progress = Math.max(0, Math.min(1, elapsed / trackDuration));
-      if (config.theme === 'vinyl' && !reduceMotion) {
-        setTonearmAngle(TONEARM_START_ANGLE + ((TONEARM_END_ANGLE - TONEARM_START_ANGLE) * progress));
-      }
     }
 
     function syncTonearm(nowPlaying) {
@@ -980,15 +1061,33 @@
 
       if (Number.isFinite(duration) && duration > 0 && Number.isFinite(elapsed) && elapsed >= 0) {
         trackDuration = duration;
-        trackElapsed = Math.min(elapsed, duration);
-        trackSyncedAt = Date.now();
-      } else {
-        trackDuration = 0;
-        trackElapsed = 0;
-        trackSyncedAt = 0;
-      }
+        if (!tonearmClockInitialized) {
+          trackElapsed = Math.min(elapsed, duration);
+          tonearmClockInitialized = true;
+          tonearmLastBaseAngle = TONEARM_START_ANGLE;
+          if (config.theme === 'vinyl' && !reduceMotion) {
+            setTonearmAngle(TONEARM_START_ANGLE + ((TONEARM_END_ANGLE - TONEARM_START_ANGLE) * (trackElapsed / duration)));
+          }
+        } else if (!trackChangeActive && !trackEndReached) {
+          // API timing is authoritative, but applying forward drift in one poll
+          // teleports the arm. Catch up at a bounded rate above normal playback.
+          var forwardDrift = elapsed - trackElapsed;
+          if (forwardDrift > TONEARM_SYNC_TOLERANCE_SECONDS) {
+            tonearmCatchupRemaining = Math.max(
+              tonearmCatchupRemaining,
+              forwardDrift - TONEARM_SYNC_TOLERANCE_SECONDS
+            );
+          }
+          if (tonearmClockRunning) tonearmFrameAt = performance.now();
+        }
 
-      updateTonearm();
+        if (root.classList.contains('is-playing') && !trackChangeActive && !trackEndReached) {
+          if (!tonearmClockRunning) resumeTonearmClock();
+          else startTonearmAnimation();
+        }
+      } else {
+        resetTonearmClock();
+      }
     }
 
     if (art) {
@@ -1112,7 +1211,9 @@
 
     function play() {
       showError(false);
+      showStatus('');
       reconnects = 0;
+      fallbackAttempted = false;
       startPlayback(false);
     }
 
@@ -1128,6 +1229,16 @@
     function reconnect() {
       if (!playRequested || reconnectTimer) return;
       if (reconnects >= MAX_RECONNECTS) {
+        var alternative = streamKey === 'primary' ? 'secondary' : 'primary';
+        if (!fallbackAttempted && config.streams[alternative] && config.streams[alternative] !== selectedStream()) {
+          fallbackAttempted = true;
+          reconnects = 0;
+          streamKey = alternative;
+          setActiveStreamButton();
+          showStatus('Поток недоступен. Подключаем резервный поток.');
+          startPlayback(true);
+          return;
+        }
         playRequested = false;
         showError(true, 'Поток не запустился. Проверьте Stream URL или сервер вещания.');
         setPlaying(false);
@@ -1184,18 +1295,24 @@
     });
 
     audio.addEventListener('waiting', function () {
-      if (!audio.paused) scheduleBuffering(350);
+      if (audio.paused || !playRequested) return;
+      scheduleBuffering(350);
+      scheduleStreamRecovery(6500);
     });
 
     audio.addEventListener('stalled', function () {
       if (audio.paused || !playRequested) return;
       scheduleBuffering(500);
-      if (stalledTimer) return;
-      var stalledStream = audio.currentSrc;
-      stalledTimer = window.setTimeout(function () {
-        stalledTimer = null;
-        if (!audio.paused && audio.readyState < 3 && audio.currentSrc === stalledStream) reconnect();
-      }, 4500);
+      scheduleStreamRecovery(4500);
+    });
+
+    audio.addEventListener('suspend', function () {
+      if (audio.paused || !playRequested || audio.readyState >= 3) return;
+      scheduleStreamRecovery(7000);
+    });
+
+    audio.addEventListener('ended', function () {
+      if (playRequested) reconnect();
     });
 
     audio.addEventListener('canplay', function () {
@@ -1203,6 +1320,10 @@
     });
 
     audio.addEventListener('progress', function () {
+      if (audio.readyState >= 3) markPlaybackReady();
+    });
+
+    audio.addEventListener('timeupdate', function () {
       if (audio.readyState >= 3) markPlaybackReady();
     });
 
@@ -1215,6 +1336,7 @@
       button.addEventListener('click', function () {
         var requestedStream = button.getAttribute('data-nfp-stream');
         streamKey = requestedStream === 'secondary' || requestedStream === 'hls' ? requestedStream : 'primary';
+        showStatus('');
         clearStalledTimer();
         clearReconnectTimer();
         setBuffering(false);
@@ -1223,6 +1345,7 @@
         var shouldContinuePlayback = playRequested || !audio.paused;
         if (shouldContinuePlayback) {
           reconnects = 0;
+          fallbackAttempted = false;
           startPlayback(true);
         }
       });
@@ -1234,9 +1357,10 @@
       if (!config.apiUrl) {
         title.textContent = config.stationLabel;
         artist.textContent = 'Прямой поток';
-        setLiveStatus(selectedStream() ? 'live' : 'offline', selectedStream() ? 'В эфире ' + currentStationName : 'Не настроено: ' + currentStationName);
+        updateAccessibleTrack(config.stationLabel, 'Прямой поток');
+        setLiveStatus('unknown', selectedStream() ? 'Состояние эфира неизвестно' : 'Поток недоступен');
         count.textContent = '';
-        setCover(config.fallbackArt);
+        setCover('');
         syncTonearm(null);
         return;
       }
@@ -1253,6 +1377,7 @@
           return response.json();
         })
         .then(function (data) {
+          if (!fallbackAttempted) showStatus('');
           var nowPlaying = data && data.now_playing ? data.now_playing : {};
           var song = nowPlaying.song || {};
           var nextTrackKey = trackKey(song);
@@ -1263,28 +1388,37 @@
             key: nextTrackKey || currentTrackKey,
             title: usableMetadataText(song.title || song.text, config.stationLabel),
             artist: usableMetadataText(song.artist, usableMetadataText(data.station && data.station.description, 'Прямой эфир')),
-            art: song.art || config.fallbackArt,
+            art: song.art || '',
             preloadedCoverReady: hasPreloadedCover,
             preloadedCover: hasPreloadedCover ? nextTrackCache.coverSrc : '',
             nowPlaying: nowPlaying,
             receivedAt: Date.now()
           };
-          currentStationName = data.station && data.station.name ? data.station.name : config.stationLabel;
+          currentStationName = config.stationLabelOverride
+            ? config.stationLabel
+            : (data.station && data.station.name ? data.station.name : config.stationLabel);
           if (stationLabel) stationLabel.textContent = currentStationName;
           setStationPlaceholderName();
-          setLiveStatus(data.is_online ? 'live' : 'offline', (data.is_online ? 'В эфире ' : 'Нет эфира: ') + currentStationName);
+          setLiveStatus(typeof data.is_online === 'boolean' ? (data.is_online ? 'live' : 'offline') : 'unknown', typeof data.is_online === 'boolean' ? ((data.is_online ? 'В эфире ' : 'Нет эфира: ') + currentStationName) : 'Состояние эфира неизвестно');
           count.textContent = data.listeners && data.listeners.current != null
             ? data.listeners.current + ' СЛУШАЮТ'
             : '— СЛУШАЮТ';
 
           if (!currentTrackKey) {
             showInitialMetadata(payload);
-          } else if ((payload.key && payload.key !== currentTrackKey && payload.key !== pendingTrackKey) || (trackRestarted && !pendingTrackKey)) {
-            if (trackEndReached || !(trackDuration > 0)) {
+          } else if (pendingTrackKey) {
+            // During a transition AzuraCast may briefly repeat either the old
+            // committed payload or the pending one. Neither starts generation two.
+            if (payload.key !== pendingTrackKey && payload.key !== currentTrackKey) {
               beginTrackTransition(payload);
-            } else {
-              queuedTrackPayload = payload;
             }
+          } else if (payload.key && payload.key !== currentTrackKey) {
+            if (payload.key === previousTrackKey && Date.now() < ignorePreviousTrackUntil) {
+              return;
+            }
+            // A fresh API identity is authoritative. Waiting for the old local
+            // duration leaves live audio, metadata, artwork and tonearm out of sync.
+            beginTrackTransition(payload);
           } else if (!trackChangeActive && !pendingTrackKey) {
             syncTonearm(nowPlaying);
           }
@@ -1293,6 +1427,13 @@
         })
         .catch(function (fetchError) {
           if (fetchError && fetchError.name === 'AbortError') return;
+          if (!hasMetadata) {
+            clearMetadataAnimation();
+            title.textContent = config.stationLabel;
+            artist.textContent = 'Метаданные недоступны';
+            updateAccessibleTrack(config.stationLabel, 'Метаданные недоступны');
+          }
+          if (!fallbackAttempted) showStatus(hasMetadata ? 'Метаданные устарели' : 'Метаданные недоступны');
           setLiveStatus(hasMetadata ? liveState : 'unknown', hasMetadata ? 'Метаданные устарели' : 'Метаданные недоступны');
         })
         .finally(function () {
@@ -1308,7 +1449,7 @@
       playRequested = false;
 
       if (root._nfpTimer) window.clearInterval(root._nfpTimer);
-      if (root._nfpTonearmTimer) window.clearInterval(root._nfpTonearmTimer);
+      stopTonearmAnimation();
       clearReconnectTimer();
       if (bufferingTimer) window.clearTimeout(bufferingTimer);
       if (stalledTimer) window.clearTimeout(stalledTimer);
@@ -1356,13 +1497,19 @@
       setActiveStreamButton();
     }
 
-    setCover(config.fallbackArt);
+    setCover('');
+
+    if (stationArt) {
+      stationArt.addEventListener('error', function () {
+        stationLogoAvailable = false;
+        if (!currentArt) cover.classList.add('is-placeholder');
+      });
+    }
     setStaticBars();
     setTonearmAngle(TONEARM_START_ANGLE);
     if (config.apiUrl) startMetadataScramble(true);
     refresh();
     root._nfpTimer = window.setInterval(refresh, REFRESH_MS);
-    root._nfpTonearmTimer = window.setInterval(updateTonearm, 1000);
     root._nfpDestroy = destroy;
     watchPlayer(root);
   }
@@ -1370,6 +1517,65 @@
   function initAll(scope) {
     var context = scope && scope.querySelectorAll ? scope : document;
     context.querySelectorAll('[data-nfp]').forEach(initPlayer);
+    context.querySelectorAll('[data-nfp-switcher]').forEach(function (switcher) {
+      if (switcher.getAttribute('data-nfp-switcher-ready')) return;
+      var current = switcher.querySelector('[data-nfp-station-current]');
+      if (!current) return;
+      switcher.setAttribute('data-nfp-switcher-ready', '1');
+      switcher.addEventListener('click', function (event) {
+        var toggleMenu = event.target.closest('[data-nfp-menu-toggle]');
+        if (toggleMenu && current.contains(toggleMenu)) {
+          var list = current.querySelector('[data-nfp-station-list]');
+          if (!list) return;
+          list.hidden = !list.hidden;
+          toggleMenu.setAttribute('aria-expanded', list.hidden ? 'false' : 'true');
+          return;
+        }
+        var choice = event.target.closest('[data-nfp-station-target]');
+        if (!choice || !current.contains(choice)) return;
+        if (choice.hasAttribute('aria-current')) {
+          current.querySelector('[data-nfp-station-list]').hidden = true;
+          current.querySelector('[data-nfp-menu-toggle]').setAttribute('aria-expanded', 'false');
+          current.querySelector('[data-nfp-menu-toggle]').focus();
+          return;
+        }
+        var templates = switcher.querySelectorAll('template[data-nfp-station-template]');
+        var template = Array.prototype.find.call(templates, function (item) {
+          return item.getAttribute('data-nfp-station-template') === choice.getAttribute('data-nfp-station-target');
+        });
+        if (!template) return;
+        var audio = current.querySelector('[data-nfp-audio]');
+        var wasPlaying = audio && !audio.paused;
+        destroyAll(current);
+        current.replaceChildren(template.content.cloneNode(true));
+        initAll(current);
+        var toggle = current.querySelector('[data-nfp-toggle]');
+        if (wasPlaying && toggle && !toggle.disabled) toggle.click();
+        var newMenu = current.querySelector('[data-nfp-menu-toggle]');
+        if (newMenu) newMenu.focus();
+      });
+      switcher.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') return;
+        var list = current.querySelector('[data-nfp-station-list]');
+        var menu = current.querySelector('[data-nfp-menu-toggle]');
+        if (list && !list.hidden && menu) {
+          list.hidden = true;
+          menu.setAttribute('aria-expanded', 'false');
+          menu.focus();
+        }
+      });
+      switcher.addEventListener('focusout', function () {
+        window.setTimeout(function () {
+          if (switcher.contains(document.activeElement)) return;
+          var list = current.querySelector('[data-nfp-station-list]');
+          var menu = current.querySelector('[data-nfp-menu-toggle]');
+          if (list && menu) {
+            list.hidden = true;
+            menu.setAttribute('aria-expanded', 'false');
+          }
+        }, 0);
+      });
+    });
   }
 
   function destroyAll(scope) {
@@ -1394,13 +1600,19 @@
 
   window.NetFmPlayer = { init: initAll, destroy: destroyAll };
 
-  if (window.jQuery && window.elementorFrontend && window.elementorFrontend.hooks) {
+  function bindElementor() {
+    if (!window.elementorFrontend || !window.elementorFrontend.hooks || window.NetFmPlayerElementorBound) return;
+    window.NetFmPlayerElementorBound = true;
     window.elementorFrontend.hooks.addAction('frontend/element_ready/net-fm-player.default', function ($scope) {
       initAll($scope && $scope[0] ? $scope[0] : document);
     });
     window.elementorFrontend.hooks.addAction('frontend/element_ready/shortcode.default', function ($scope) {
       initAll($scope && $scope[0] ? $scope[0] : document);
     });
+  }
+  if (window.jQuery) {
+    window.jQuery(window).on('elementor/frontend/init', bindElementor);
+    bindElementor();
   }
 })();
 

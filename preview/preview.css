@@ -1,0 +1,80 @@
+body {
+  min-width: 320px;
+  margin: 0;
+  color: #eff4fa;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: #131416;
+}
+
+* { box-sizing: border-box; }
+
+.nfp-lab {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: clamp(28px, 5vw, 80px);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.nfp-lab__panel {
+  align-self: start;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 32px 26px;
+  border: 1px solid #34383d;
+  border-left: 0;
+  border-radius: 0 14px 14px 0;
+  background: #1b1d20;
+  box-shadow: 0 18px 42px rgba(0, 0, 0, .25);
+}
+
+.nfp-lab__eyebrow, .nfp-lab__preview-label { margin: 0 0 6px; color: #8ba5c5; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.nfp-lab__intro h1 { margin: 0; font-size: 23px; line-height: 1.2; }
+.nfp-lab__intro > p:last-child { margin: 10px 0 22px; color: #aeb7c3; font-size: 14px; line-height: 1.55; }
+.nfp-lab__form details { border-top: 1px solid #34383d; }
+.nfp-lab__form details:last-of-type { border-bottom: 1px solid #34383d; }
+.nfp-lab__form summary { min-height: 48px; display: flex; align-items: center; cursor: pointer; color: #f4f7fb; font-size: 14px; font-weight: 700; }
+.nfp-lab__form summary::marker { color: #8ba5c5; }
+.nfp-lab__form > details > summary { padding-inline: 10px; border-inline-start: 3px solid #7ca8e7; color: #b9d5fa; background: rgba(124, 168, 231, .08); font-weight: 800; letter-spacing: .01em; }
+.nfp-lab__form > details[open] > summary { background: rgba(124, 168, 231, .13); }
+.nfp-lab__form .nfp-lab__test-controls { padding: 0 12px; border: 1px solid #3a4048; border-radius: 8px; background: #202328; }
+.nfp-lab__form .nfp-lab__test-controls summary { min-height: 42px; color: #b9c9dc; font-size: 12px; }
+.nfp-lab__test-controls label { padding: 0 0 12px; }
+.nfp-lab__fields { display: grid; gap: 13px; padding: 2px 0 18px; }
+.nfp-lab__fields label { display: grid; gap: 6px; color: #c6cdd7; font-size: 12px; font-weight: 650; }
+.nfp-lab__fields label span { color: #8893a1; font-size: 11px; font-weight: 400; line-height: 1.35; }
+.nfp-lab__fields input, .nfp-lab__fields select { min-width: 0; min-height: 38px; padding: 7px 9px; border: 1px solid #424850; border-radius: 7px; color: #f6f8fa; background: #25282d; font: inherit; }
+.nfp-lab__fields input[type="color"] { width: 100%; padding: 3px; cursor: pointer; }
+.nfp-lab__fields input[type="range"] { padding: 0; accent-color: #9fc5f7; }
+.nfp-lab__fields input[type="file"] { min-height: 42px; padding: 8px; color: #aeb7c3; font-size: 11px; }
+.nfp-lab__fields output { color: #9fc5f7; font-size: 11px; font-weight: 700; }
+.nfp-lab__fields input:focus-visible, .nfp-lab__fields select:focus-visible, .nfp-lab__button:focus-visible { outline: 2px solid #8ebdff; outline-offset: 2px; }
+.nfp-lab__check { display: flex !important; align-items: center; gap: 8px; margin: 0; color: #c6cdd7; font-size: 13px; }
+.nfp-lab__check input { width: 18px; height: 18px; accent-color: #7ca8e7; }
+.nfp-lab__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; padding-top: 18px; }
+.nfp-lab__button { min-height: 40px; padding: 0 12px; border: 1px solid #4a515a; border-radius: 7px; color: #e8edf4; background: #292d33; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; transition-property: background-color, border-color, transform; transition-duration: 150ms; }
+.nfp-lab__button:hover { border-color: #6c7d92; background: #343a42; }
+.nfp-lab__button:active { transform: scale(.96); }
+.nfp-lab__button--primary { border-color: #7ca8e7; color: #10233e; background: #9fc5f7; }
+.nfp-lab__button--primary:hover { background: #b9d5fa; }
+.nfp-lab__actions output { flex-basis: 100%; min-height: 1.2em; color: #9fc5f7; font-size: 12px; }
+
+.nfp-lab__preview { min-height: 0; padding: 48px 40px 48px 0; }
+.nfp-lab__player { display: flex; width: 100%; min-height: calc(100vh - 96px); }
+
+@media (max-width: 860px) {
+  .nfp-lab { grid-template-columns: 1fr; width: min(100% - 28px, 740px); margin: 0 auto; padding: 14px 0 32px; }
+  .nfp-lab__panel { position: static; height: auto; overflow: visible; padding: 22px; border-left: 1px solid #34383d; border-radius: 14px; }
+  .nfp-lab__preview { min-height: 0; padding: 0; }
+  .nfp-lab__player { min-height: auto; }
+}
+
+@media (max-width: 480px) {
+  .nfp-lab { width: min(100% - 20px, 740px); }
+  .nfp-lab__panel { padding: 18px; }
+}

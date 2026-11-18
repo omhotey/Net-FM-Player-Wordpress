@@ -3,6 +3,29 @@
   box-sizing: border-box !important;
 }
 
+@property --nfp-tonearm-wobble {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.nfp-station-switcher > label {
+  display: block;
+  margin-bottom: 0.5em;
+}
+
+.nfp__status:not([hidden]) {
+  font-size: 0.8em;
+  margin-top: 0.35em;
+}
+
+.nfp-container {
+  width: 100%;
+  display: block;
+  container-type: inline-size;
+  container-name: nfp-player;
+}
+
 .nfp {
   --nfp-green: #19cf61;
   --nfp-deep: #04170b;
@@ -10,13 +33,8 @@
   --nfp-surface: rgba(6, 29, 14, .92);
   --nfp-text: #f5fff7;
   --nfp-live-color: #8b949e;
-  --nfp-tonearm-angle: 12deg;
+  --nfp-tonearm-angle: 80deg;
   width: 100% !important;
-  max-width: 580px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 20px !important;
-  padding: clamp(18px, 4vw, 28px) !important;
   border: 1px solid rgba(128, 255, 169, .22) !important;
   border-radius: 24px !important;
   background:
@@ -27,6 +45,76 @@
   color: var(--nfp-text) !important;
   font-family: inherit !important;
   overflow: hidden !important;
+}
+
+/* Layout owns the player composition; themes only skin the shared structure. */
+.nfp--layout-horizontal {
+  max-width: 980px !important;
+  display: grid !important;
+  grid-template-columns: minmax(240px, .92fr) minmax(0, 1.08fr) !important;
+  grid-template-rows: auto auto auto auto !important;
+  align-items: center !important;
+  gap: 18px clamp(26px, 4vw, 54px) !important;
+  padding: clamp(18px, 4vw, 30px) clamp(28px, 5vw, 48px) !important;
+}
+
+.nfp--layout-horizontal .nfp__vinyl-media {
+  grid-column: 1 !important;
+  grid-row: 1 / span 4 !important;
+}
+
+.nfp--layout-horizontal .nfp__head {
+  grid-column: 2 !important;
+  grid-row: 1 !important;
+}
+
+.nfp--layout-horizontal .nfp__info {
+  grid-column: 2 !important;
+  grid-row: 2 !important;
+}
+
+.nfp--layout-horizontal .nfp__panel {
+  grid-column: 2 !important;
+  grid-row: 3 !important;
+}
+
+.nfp--layout-horizontal .nfp__volume {
+  grid-column: 2 !important;
+  grid-row: 4 !important;
+}
+
+.nfp--layout-horizontal .nfp__error {
+  grid-column: 1 / -1 !important;
+}
+
+.nfp--layout-vertical {
+  max-width: 580px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 20px !important;
+  padding: clamp(18px, 4vw, 28px) !important;
+}
+
+.nfp--layout-vertical .nfp__info {
+  margin-top: 2px !important;
+}
+
+.nfp--layout-vertical .nfp__panel {
+  grid-template-columns: 56px minmax(0, 1fr) !important;
+  gap: 10px !important;
+}
+
+.nfp--layout-vertical .nfp__play {
+  width: 56px !important;
+  height: 56px !important;
+  min-width: 56px !important;
+  min-height: 56px !important;
+}
+
+.nfp--layout-vertical .nfp__volume {
+  grid-template-columns: 44px minmax(0, 1fr) !important;
+  gap: 10px !important;
+  margin-top: 10px !important;
 }
 
 .nfp__head {
@@ -141,12 +229,21 @@
   opacity: 0 !important;
 }
 
-.nfp__cover {
+.nfp__vinyl-media {
   position: relative !important;
   width: 100% !important;
   aspect-ratio: 1 / 1 !important;
   min-height: 260px !important;
   max-height: 420px !important;
+  container-type: inline-size;
+}
+
+.nfp__cover {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
   display: block !important;
   border-radius: 16px !important;
   overflow: hidden !important;
@@ -156,10 +253,11 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1) !important;
 }
 
+.nfp__station-art,
 .nfp__art {
   width: 100% !important;
   height: 100% !important;
-  min-height: 260px !important;
+  min-height: 0 !important;
   display: block !important;
   object-fit: cover !important;
   object-position: center !important;
@@ -167,6 +265,20 @@
   border-radius: 0 !important;
   box-shadow: none !important;
   will-change: opacity;
+}
+
+.nfp__station-art {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 1 !important;
+  object-fit: contain !important;
+  background: radial-gradient(circle at 35% 30%, #a1452c, #351b18 70%) !important;
+}
+
+.nfp__art {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
 }
 
 .nfp__cover:after {
@@ -210,7 +322,7 @@
 .nfp__info {
   width: 100% !important;
   min-width: 0 !important;
-  padding: 0 2px !important;
+  padding: 0 !important;
 }
 
 .nfp__kicker {
@@ -225,6 +337,8 @@
 
 .nfp__title {
   min-height: 0 !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   margin: 0 !important;
   color: var(--nfp-text) !important;
   font-size: clamp(20px, 4vw, 30px) !important;
@@ -232,29 +346,27 @@
   font-weight: 800 !important;
   letter-spacing: -.03em !important;
   text-wrap: balance !important;
-  overflow: visible !important;
-  display: block !important;
+  overflow: hidden !important;
+  overflow-wrap: anywhere !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
 }
 
 .nfp.is-metadata-pending .nfp__title {
-  display: block !important;
-  font-size: clamp(20px, 4vw, 30px) !important;
-  line-height: 1.12 !important;
-  text-wrap: nowrap !important;
-  white-space: nowrap !important;
-  overflow: visible !important;
-  -webkit-line-clamp: unset !important;
+  text-wrap: balance !important;
+  white-space: normal !important;
 }
 
 .nfp.is-metadata-pending.is-metadata-revealing .nfp__title {
-  display: block !important;
-  overflow: visible !important;
   text-wrap: balance !important;
   white-space: normal !important;
 }
 
 .nfp__artist {
   min-height: calc(1.6em + 6px) !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
   margin: 4px 0 0 !important;
   padding: 2px 0 4px !important;
   color: rgba(247, 255, 245, .9) !important;
@@ -341,10 +453,27 @@
   cursor: pointer !important;
 }
 
-.nfp button:focus-visible,
-.nfp__volume-range:focus-visible {
+.nfp button:focus-visible {
   outline: 3px solid #ffffff !important;
   outline-offset: 3px !important;
+}
+
+.nfp__volume-range:focus {
+  outline: none !important;
+}
+
+.nfp__volume-range:focus-visible {
+  outline: none !important;
+  border-radius: 999px !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .82), 0 0 14px rgba(255, 255, 255, .42) !important;
+}
+
+@media (forced-colors: active) {
+  .nfp__volume-range:focus-visible {
+    outline: 2px solid CanvasText !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+  }
 }
 
 .nfp button:disabled {
@@ -459,13 +588,13 @@
     padding: 14px !important;
   }
 
-  .nfp__cover {
+  .nfp__vinyl-media {
     min-height: 210px !important;
     aspect-ratio: 4 / 3 !important;
   }
 
   .nfp__art {
-    min-height: 210px !important;
+    min-height: 0 !important;
   }
 
   .nfp__title {
@@ -525,6 +654,9 @@
   padding: 0 !important;
   appearance: none !important;
   -webkit-appearance: none !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
   background: transparent !important;
   cursor: pointer !important;
 }
@@ -664,6 +796,12 @@
   opacity: .38 !important;
 }
 
+.nfp.nfp--theme-studio .nfp__eq,
+.nfp.nfp--theme-studio .nfp__scope,
+.nfp.nfp--theme-studio .nfp__eq-note {
+  display: none !important;
+}
+
 .nfp__eq-note {
   position: absolute !important;
   z-index: 3 !important;
@@ -679,19 +817,20 @@
   font-weight: 750 !important;
 }
 
-/* Vinyl theme: a two-column turntable layout with the cover as record label. */
+/* Vinyl theme: turntable media treatment and visual skin. */
 .nfp--theme-vinyl {
   --nfp-green: #8f2e19;
   --nfp-yellow: #d59b32;
   --nfp-text: #292118;
+  --nfp-vinyl-media-size: 100%;
+  --nfp-vinyl-record-size: 98%;
+  --nfp-vinyl-backdrop-gap: clamp(4px, 2cqi, 8px);
+  --nfp-tonearm-pivot-x: 90%;
+  --nfp-tonearm-pivot-y: 8%;
+  --nfp-tonearm-length: 58%;
+  --nfp-tonearm-thickness: clamp(5px, 1.6cqi, 7px);
+  --nfp-tonearm-pivot-size: clamp(18px, 7cqi, 28px);
   width: 100% !important;
-  max-width: 920px !important;
-  display: grid !important;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.15fr) !important;
-  grid-template-rows: auto auto auto auto !important;
-  align-items: center !important;
-  gap: 18px clamp(42px, 5vw, 58px) !important;
-  padding: clamp(18px, 4vw, 30px) clamp(28px, 5vw, 48px) !important;
   border: 1px solid rgba(61, 42, 21, .26) !important;
   border-radius: 22px !important;
   background:
@@ -703,59 +842,56 @@
   isolation: isolate !important;
 }
 
-.nfp--theme-vinyl:before {
-  content: "" !important;
-  z-index: 0 !important;
-  grid-column: 1 !important;
-  grid-row: 1 / span 4 !important;
-  width: 100% !important;
+.nfp--theme-vinyl .nfp__vinyl-media {
+  width: var(--nfp-vinyl-media-size) !important;
+  min-height: 0 !important;
+  max-height: none !important;
   aspect-ratio: 1 !important;
   align-self: center !important;
-  justify-self: stretch !important;
-  border-radius: 50% !important;
-  background: transparent !important;
-  box-shadow:
-    14px 16px 30px rgba(82, 64, 38, .28),
-    -12px -12px 24px rgba(255, 255, 255, .82) !important;
-  transform: scale(1.07) !important;
-  pointer-events: none !important;
 }
 
-.nfp--theme-vinyl .nfp__cover .nfp__vinyl-reflections {
-  position: absolute !important;
-  z-index: 1 !important;
-  inset: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  border-radius: 50% !important;
-  animation: nfp-vinyl-counterspin 4.6s linear infinite !important;
-  animation-play-state: paused !important;
-  pointer-events: none !important;
-}
-
-.nfp--theme-vinyl .nfp__cover .nfp__vinyl-reflections:after {
+.nfp--theme-vinyl .nfp__vinyl-media:before {
   content: "" !important;
   position: absolute !important;
-  inset: 0 !important;
+  z-index: 0 !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: calc(var(--nfp-vinyl-record-size) + var(--nfp-vinyl-backdrop-gap) + var(--nfp-vinyl-backdrop-gap)) !important;
+  aspect-ratio: 1 !important;
   border-radius: 50% !important;
-  background:
-    radial-gradient(ellipse 56% 60% at 7% 7%, rgba(255, 253, 235, .78), rgba(255, 253, 235, .30) 43%, transparent 74%),
-    radial-gradient(ellipse 56% 60% at 93% 93%, rgba(255, 253, 235, .70), rgba(255, 253, 235, .25) 43%, transparent 74%) !important;
-  opacity: .94;
+  background: #d8caad !important;
+  box-shadow:
+    16px 18px 34px rgba(82, 64, 38, .3),
+    -13px -13px 26px rgba(255, 255, 255, .8) !important;
+  transform: translate(-50%, -50%) !important;
+  pointer-events: none !important;
+}
+
+.nfp--theme-vinyl .nfp__vinyl-media:after {
+  content: "" !important;
+  position: absolute !important;
+  z-index: 2 !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: var(--nfp-vinyl-record-size) !important;
+  aspect-ratio: 1 !important;
+  border-radius: 50% !important;
+  background: linear-gradient(45deg, transparent 0%, transparent 32%, rgba(255, 253, 235, .30) 48%, transparent 64%, transparent 100%) !important;
+  opacity: .5;
+  transform: translate(-50%, -50%);
   transform-origin: center !important;
-  will-change: transform;
   animation: nfp-vinyl-reflection-wobble 6.8s ease-in-out infinite !important;
   animation-play-state: paused !important;
+  will-change: transform, opacity;
   pointer-events: none !important;
+}
+
+.nfp--theme-vinyl .nfp__vinyl-reflections {
+  display: none !important;
 }
 
 .nfp__vinyl-arm {
   display: none !important;
-}
-
-.nfp--theme-vinyl .nfp__head {
-  grid-column: 2 !important;
-  grid-row: 1 !important;
 }
 
 .nfp--theme-vinyl .nfp__live,
@@ -778,16 +914,13 @@
   display: none !important;
 }
 
-.nfp--theme-vinyl .nfp__menu-slot i {
-  opacity: 1 !important;
-}
-
 .nfp--theme-vinyl .nfp__cover {
-  grid-column: 1 !important;
-  grid-row: 1 / span 4 !important;
-  width: 100% !important;
-  min-height: 0 !important;
-  max-height: none !important;
+  position: absolute !important;
+  z-index: 1 !important;
+  top: 50% !important;
+  left: 50% !important;
+  width: var(--nfp-vinyl-record-size) !important;
+  height: auto !important;
   aspect-ratio: 1 !important;
   box-sizing: border-box !important;
   border: 5px solid #181512 !important;
@@ -796,9 +929,10 @@
     repeating-radial-gradient(circle at center, rgba(255, 255, 255, .07) 0 1px, transparent 2px 8px),
     radial-gradient(circle at center, #292825, #141311 39%, #050505 67%, #181614 100%) !important;
   overflow: hidden !important;
-  z-index: 1 !important;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .13) !important;
   isolation: isolate !important;
+  transform-origin: 50% 50% !important;
+  transform: translate(-50%, -50%);
 }
 
 .nfp--theme-vinyl .nfp__cover:before {
@@ -820,36 +954,34 @@
 }
 
 .nfp--theme-vinyl .nfp__vinyl-arm {
-  position: relative !important;
-  z-index: 5 !important;
-  grid-column: 1 !important;
-  grid-row: 1 / span 4 !important;
-  align-self: stretch !important;
-  justify-self: stretch !important;
+  position: absolute !important;
+  z-index: 3 !important;
+  top: var(--nfp-tonearm-pivot-y) !important;
+  left: var(--nfp-tonearm-pivot-x) !important;
   display: block !important;
-  width: 24% !important;
-  height: 68% !important;
-  margin: 4% -6% 0 auto !important;
+  width: var(--nfp-tonearm-length) !important;
+  height: var(--nfp-tonearm-thickness) !important;
+  margin: 0 !important;
   pointer-events: none !important;
-  transform: rotate(var(--nfp-tonearm-angle)) !important;
-  transform-origin: 50% 7% !important;
-  transition: transform 1200ms linear !important;
+  --nfp-tonearm-wobble: 0deg;
+  transform: rotate(calc(var(--nfp-tonearm-angle) + var(--nfp-tonearm-wobble))) !important;
+  transform-origin: 0 50% !important;
+  transition: none !important;
 }
 
 .nfp--theme-vinyl .nfp__vinyl-arm-body {
   position: absolute !important;
   inset: 0 !important;
   display: block !important;
-  transform-origin: 50% 7% !important;
 }
 
 .nfp--theme-vinyl .nfp__vinyl-arm-body:before {
   content: "" !important;
   position: absolute !important;
-  top: 7% !important;
-  left: calc(50% - 3px) !important;
-  width: 6px !important;
-  height: 81% !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   border: 1px solid rgba(26, 24, 21, .55) !important;
   border-radius: 999px !important;
   background: linear-gradient(90deg, #6f6b63, #edebe2 48%, #77736b) !important;
@@ -859,31 +991,32 @@
 .nfp--theme-vinyl .nfp__vinyl-arm-body:after {
   content: "" !important;
   position: absolute !important;
-  top: 0 !important;
-  left: 50% !important;
-  width: 28px !important;
-  height: 28px !important;
+  top: 50% !important;
+  left: 0 !important;
+  width: var(--nfp-tonearm-pivot-size) !important;
+  height: var(--nfp-tonearm-pivot-size) !important;
   border: 5px solid #2b2926 !important;
   border-radius: 50% !important;
   background: radial-gradient(circle, #171512 0 28%, #817c71 31% 48%, #21201e 51%) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, .35) !important;
-  transform: translateX(-50%) !important;
+  transform: translate(-50%, -50%) !important;
 }
 
 .nfp--theme-vinyl .nfp__vinyl-head {
   position: absolute !important;
   z-index: 1 !important;
-  bottom: 0 !important;
-  left: 50% !important;
-  width: 29px !important;
-  height: 20px !important;
+  top: 50% !important;
+  left: 100% !important;
+  width: 18% !important;
+  height: 320% !important;
   border: 1px solid #4d4a43 !important;
   border-radius: 3px 3px 6px 6px !important;
   background: repeating-linear-gradient(90deg, #b6b0a4 0 2px, #625e56 2px 4px) !important;
   box-shadow: 0 2px 4px rgba(0, 0, 0, .32) !important;
-  transform: translateX(-50%) rotate(-8deg) !important;
+  transform: translate(-50%, -50%) rotate(8deg) !important;
 }
 
+.nfp--theme-vinyl .nfp__station-art,
 .nfp--theme-vinyl .nfp__art,
 .nfp--theme-vinyl .nfp__placeholder {
   position: absolute !important;
@@ -901,6 +1034,12 @@
 
 .nfp--theme-vinyl .nfp__art {
   object-fit: cover !important;
+  clip-path: circle(49.5% at 50% 50%) !important;
+}
+
+.nfp--theme-vinyl .nfp__station-art {
+  z-index: 1 !important;
+  object-fit: contain !important;
   clip-path: circle(49.5% at 50% 50%) !important;
 }
 
@@ -935,6 +1074,11 @@
   background: radial-gradient(circle at 35% 28%, #1b9e5a, #07572f 72%) !important;
 }
 
+/* A loaded station-logo base layer replaces the generic pending artwork. */
+.nfp--theme-vinyl.is-track-pending .nfp__cover.is-fallback-art .nfp__placeholder {
+  display: none !important;
+}
+
 .nfp--theme-vinyl .nfp__station-name,
 .nfp--theme-vinyl .nfp__station-radio {
   display: block !important;
@@ -963,19 +1107,22 @@
 
 .nfp--theme-vinyl .nfp__cover {
   animation: nfp-vinyl-spin 4.6s linear infinite !important;
+  animation-direction: normal !important;
   animation-play-state: paused !important;
 }
 
-.nfp--theme-vinyl.is-playing .nfp__cover,
-.nfp--theme-vinyl.is-playing .nfp__vinyl-reflections,
-.nfp--theme-vinyl.is-playing .nfp__vinyl-reflections:after {
+.nfp--theme-vinyl.is-playing .nfp__cover {
   animation-play-state: running !important;
 }
 
-
-.nfp--theme-vinyl.is-playing .nfp__vinyl-arm-body {
-  animation: nfp-tonearm-sway 3.2s ease-in-out infinite !important;
+.nfp--theme-vinyl.is-playing .nfp__vinyl-media:after {
+  animation-play-state: running !important;
 }
+
+.nfp--theme-vinyl.is-playing .nfp__vinyl-arm {
+  animation: nfp-tonearm-sway 4s ease-in-out infinite !important;
+}
+
 
 .nfp--theme-vinyl.is-track-changing .nfp__vinyl-arm {
   transition-duration: 520ms !important;
@@ -988,42 +1135,40 @@
   display: none !important;
 }
 
-.nfp--theme-vinyl .nfp__info {
-  grid-column: 2 !important;
-  grid-row: 2 !important;
-  padding: 0 !important;
-}
-
 .nfp--theme-vinyl .nfp__kicker {
   color: rgba(41, 33, 24, .55) !important;
 }
 
 .nfp--theme-vinyl .nfp__title {
   color: #201911 !important;
+  font-size: clamp(28px, 3.15vw, 40px) !important;
+  padding-block: .06em .1em !important;
+  line-height: 1.12 !important;
+  overflow: hidden !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 2 !important;
+  -webkit-box-orient: vertical !important;
 }
 
 .nfp--theme-vinyl .nfp__artist {
   color: rgba(41, 33, 24, .75) !important;
-}
-
-.nfp--theme-vinyl .nfp__panel {
-  grid-column: 2 !important;
-  grid-row: 3 !important;
-  grid-template-columns: 58px minmax(0, 1fr) !important;
+  min-height: 0 !important;
+  font-size: clamp(16px, 1.7vw, 20px) !important;
+  padding-block: .08em !important;
+  line-height: 1.35 !important;
 }
 
 .nfp--theme-vinyl .nfp__play {
-  width: 58px !important;
-  height: 58px !important;
-  min-width: 58px !important;
-  min-height: 58px !important;
-  background: var(--nfp-play-color, linear-gradient(145deg, #bc5433, #7f281a)) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .24), rgba(0, 0, 0, .16)),
+    var(--nfp-play-color, linear-gradient(145deg, #bc5433, #7f281a)) !important;
   color: var(--nfp-play-contrast, #fff5e5) !important;
   border: 1px solid rgba(255, 241, 216, .42) !important;
   box-shadow:
-    8px 9px 16px rgba(94, 67, 34, .24),
-    -5px -6px 12px rgba(255, 255, 255, .48),
-    inset 1px 1px rgba(255, 228, 188, .18) !important;
+    8px 9px 16px rgba(94, 67, 34, .28),
+    -6px -7px 14px rgba(255, 255, 255, .56),
+    inset 2px 2px 3px rgba(255, 248, 222, .32),
+    inset -2px -2px 4px rgba(72, 48, 23, .22) !important;
 }
 
 .nfp--theme-vinyl .nfp__quality {
@@ -1061,17 +1206,6 @@
     inset 1px 1px rgba(255, 255, 255, .28) !important;
 }
 
-.nfp--theme-vinyl .nfp__volume {
-  grid-column: 2 !important;
-  grid-row: 4 !important;
-  grid-template-columns: 58px minmax(0, 1fr) !important;
-  padding: 0 !important;
-}
-
-.nfp--theme-vinyl .nfp__volume .nfp__mute {
-  justify-self: center !important;
-}
-
 .nfp--theme-vinyl .nfp__volume-range::-webkit-slider-runnable-track {
   background: linear-gradient(90deg, var(--nfp-volume-color, #a13b23), rgba(41, 33, 24, .18)) !important;
   border-color: rgba(101, 77, 45, .22) !important;
@@ -1105,98 +1239,66 @@
 }
 
 .nfp--theme-vinyl .nfp__error {
-  grid-column: 1 / -1 !important;
   background: rgba(150, 48, 29, .12) !important;
   color: #762c1d !important;
 }
 
 @keyframes nfp-vinyl-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes nfp-vinyl-counterspin {
-  to { transform: rotate(-360deg); }
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 @keyframes nfp-vinyl-reflection-wobble {
   0%, 100% {
     opacity: .5;
-    transform: rotate(-4deg);
+    transform: translate(-50%, -50%) rotate(-4deg);
   }
   28% {
     opacity: .98;
-    transform: rotate(4deg);
+    transform: translate(-50%, -50%) rotate(4deg);
   }
   63% {
     opacity: .54;
-    transform: rotate(-3deg);
+    transform: translate(-50%, -50%) rotate(-3deg);
   }
   82% {
     opacity: .84;
-    transform: rotate(2.2deg);
+    transform: translate(-50%, -50%) rotate(2.2deg);
   }
 }
 
 @keyframes nfp-tonearm-sway {
-  0%, 100% { transform: rotate(-.4deg); }
-  50% { transform: rotate(.4deg); }
+  0%, 100% { --nfp-tonearm-wobble: -.25deg; }
+  50% { --nfp-tonearm-wobble: .25deg; }
 }
 
-.nfp--theme-vinyl.is-compact {
-  display: flex !important;
-  gap: 22px !important;
-  padding-top: 32px !important;
+@media (prefers-reduced-motion: reduce) {
+  .nfp--theme-vinyl.is-playing .nfp__cover,
+  .nfp--theme-vinyl.is-playing .nfp__vinyl-media:after,
+  .nfp--theme-vinyl.is-playing .nfp__vinyl-arm {
+    animation: none !important;
+  }
 }
 
-.nfp--theme-vinyl.is-compact:before {
-  position: absolute !important;
-  top: 32px !important;
-  left: 50% !important;
-  display: block !important;
-  width: min(calc(100% - 60px), 360px) !important;
-  transform: translateX(-50%) scale(1.07) !important;
+.nfp--theme-vinyl.nfp--layout-vertical {
+  --nfp-vinyl-media-size: min(100%, 380px);
 }
 
-.nfp--theme-vinyl.is-compact .nfp__cover {
-  width: min(100%, 360px) !important;
+.nfp--theme-vinyl.nfp--layout-vertical .nfp__vinyl-media {
+  width: var(--nfp-vinyl-media-size) !important;
   align-self: center !important;
-  order: -2 !important;
 }
 
-.nfp--theme-vinyl.is-compact .nfp__vinyl-arm {
-  position: absolute !important;
-  z-index: 5 !important;
-  top: 32px !important;
-  right: max(8px, calc(50% - 180px)) !important;
-  width: 86px !important;
-  height: 220px !important;
-  margin: 0 !important;
-  transform: rotate(var(--nfp-tonearm-angle)) !important;
+.nfp--theme-vinyl.nfp--layout-vertical .nfp__title {
+  font-size: clamp(26px, 7vw, 36px) !important;
+  line-height: 1.12 !important;
 }
 
-.nfp--theme-vinyl.is-compact .nfp__head {
-  order: -1 !important;
-  margin-top: 12px !important;
-}
-
-.nfp--theme-vinyl.is-compact .nfp__menu-slot {
-  display: none !important;
-}
-
-.nfp--theme-vinyl.is-compact .nfp__panel {
-  grid-template-columns: 56px minmax(0, 1fr) !important;
-}
-
-.nfp--theme-vinyl.is-compact .nfp__artist {
+.nfp--theme-vinyl.nfp--layout-vertical .nfp__artist {
   min-height: 0 !important;
-  margin-top: -8px !important;
-  padding-block: 0 !important;
-  line-height: 1.3 !important;
-}
-
-.nfp--theme-vinyl.is-compact .nfp__volume {
-  grid-template-columns: 56px minmax(0, 1fr) !important;
-  margin-top: 10px !important;
+  margin-top: 4px !important;
+  padding-block: .08em !important;
+  line-height: 1.35 !important;
 }
 
 .nfp.is-narrow {
@@ -1209,14 +1311,12 @@
   min-height: 0 !important;
 }
 
-.nfp.is-narrow .nfp__panel,
-.nfp--theme-vinyl.is-narrow .nfp__panel {
+.nfp.is-narrow .nfp__panel {
   grid-template-columns: 52px minmax(0, 1fr) !important;
   gap: 6px !important;
 }
 
-.nfp.is-narrow .nfp__play,
-.nfp--theme-vinyl.is-narrow .nfp__play {
+.nfp.is-narrow .nfp__play {
   width: 52px !important;
   height: 52px !important;
   min-width: 52px !important;
@@ -1225,6 +1325,56 @@
 
 .nfp.is-narrow .nfp__quality {
   min-width: 0 !important;
+}
+
+.nfp .nfp__station-menu {
+  position: relative !important;
+  margin-left: auto !important;
+  flex: 0 0 auto !important;
+  z-index: 20 !important;
+}
+
+.nfp .nfp__station-menu .nfp__menu-slot {
+  display: grid !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  color: inherit !important;
+}
+
+.nfp .nfp__station-menu .nfp__menu-slot i {
+  opacity: 1 !important;
+}
+
+.nfp .nfp__station-list:not([hidden]) {
+  position: absolute !important;
+  right: 0 !important;
+  top: 100% !important;
+  min-width: 180px !important;
+  max-width: min(260px, 75vw) !important;
+  display: grid !important;
+  padding: 6px !important;
+  border: 1px solid rgba(100, 80, 55, .25) !important;
+  border-radius: 12px !important;
+  background: #faf4e7 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .22) !important;
+}
+
+.nfp .nfp__station-list button {
+  display: block !important;
+  width: 100% !important;
+  border: 0 !important;
+  border-radius: 7px !important;
+  padding: 10px 12px !important;
+  background: transparent !important;
+  color: #292118 !important;
+  text-align: left !important;
+  cursor: pointer !important;
+}
+
+.nfp .nfp__station-list button:hover,
+.nfp .nfp__station-list button:focus-visible,
+.nfp .nfp__station-list button[aria-current] {
+  background: #e7d9bd !important;
 }
 
 .nfp.is-narrow .nfp__quality button {
@@ -1240,82 +1390,74 @@
   gap: 8px !important;
 }
 
-.nfp--theme-vinyl.is-narrow .nfp__vinyl-arm {
-  right: max(8px, calc(50% - 180px)) !important;
-  width: 76px !important;
-  height: 195px !important;
-}
-
-.nfp--theme-vinyl.is-narrow .nfp__volume {
-  grid-template-columns: 52px minmax(0, 1fr) !important;
-  column-gap: 6px !important;
-}
-
 .nfp--theme-vinyl.is-narrow {
-  gap: 20px !important;
-  padding-top: 32px !important;
+  --nfp-vinyl-media-size: min(calc(100% - 32px), 360px);
 }
 
-.nfp--theme-vinyl.is-narrow:before {
-  width: min(calc(100% - 32px), 360px) !important;
+.nfp--theme-vinyl.is-narrow .nfp__vinyl-media {
+  width: var(--nfp-vinyl-media-size) !important;
 }
 
-@media (max-width: 700px) {
-  .nfp--theme-vinyl {
+.nfp--theme-vinyl.is-narrow .nfp__title {
+  font-size: clamp(25px, 8.2vw, 32px) !important;
+}
+
+.nfp--theme-vinyl.is-narrow .nfp__artist {
+  font-size: 15px !important;
+}
+
+@container nfp-player (max-width: 640px) {
+  .nfp--layout-horizontal {
+    max-width: 580px !important;
     display: flex !important;
-    gap: 22px !important;
-    padding-top: 32px !important;
+    flex-direction: column !important;
+    gap: 20px !important;
+    padding: clamp(18px, 4vw, 28px) !important;
   }
 
-  .nfp--theme-vinyl:before {
-    position: absolute !important;
-    top: 32px !important;
-    left: 50% !important;
-    display: block !important;
-    width: min(calc(100% - 60px), 360px) !important;
-    transform: translateX(-50%) scale(1.07) !important;
+  .nfp--layout-horizontal .nfp__info {
+    margin-top: 2px !important;
   }
 
-  .nfp--theme-vinyl .nfp__cover {
-    width: min(100%, 360px) !important;
-    align-self: center !important;
-    order: -2 !important;
-  }
-
-  .nfp--theme-vinyl .nfp__vinyl-arm {
-    position: absolute !important;
-    z-index: 5 !important;
-    top: 32px !important;
-    right: max(8px, calc(50% - 180px)) !important;
-    width: 86px !important;
-    height: 220px !important;
-    margin: 0 !important;
-    transform: rotate(var(--nfp-tonearm-angle)) !important;
-  }
-
-  .nfp--theme-vinyl .nfp__head {
-    order: -1 !important;
-    margin-top: 12px !important;
-  }
-
-  .nfp--theme-vinyl .nfp__menu-slot {
-    display: none !important;
-  }
-
-  .nfp--theme-vinyl .nfp__panel {
+  .nfp--layout-horizontal .nfp__panel {
     grid-template-columns: 56px minmax(0, 1fr) !important;
+    gap: 10px !important;
   }
 
-  .nfp--theme-vinyl .nfp__artist {
-    min-height: 0 !important;
-    margin-top: -8px !important;
-    padding-block: 0 !important;
-    line-height: 1.3 !important;
+  .nfp--layout-horizontal .nfp__play {
+    width: 56px !important;
+    height: 56px !important;
+    min-width: 56px !important;
+    min-height: 56px !important;
   }
 
-  .nfp--theme-vinyl .nfp__volume {
+  .nfp--layout-horizontal .nfp__volume {
+    grid-template-columns: 44px minmax(0, 1fr) !important;
+    gap: 10px !important;
     margin-top: 10px !important;
   }
+
+  .nfp--theme-vinyl.nfp--layout-horizontal {
+    --nfp-vinyl-media-size: min(100%, 380px);
+  }
+
+  .nfp--theme-vinyl.nfp--layout-horizontal .nfp__vinyl-media {
+    width: var(--nfp-vinyl-media-size) !important;
+    align-self: center !important;
+  }
+
+  .nfp--theme-vinyl.nfp--layout-horizontal .nfp__title {
+    font-size: clamp(26px, 7vw, 36px) !important;
+    line-height: 1.12 !important;
+  }
+
+  .nfp--theme-vinyl.nfp--layout-horizontal .nfp__artist {
+    min-height: 0 !important;
+    margin-top: 4px !important;
+    padding-block: .08em !important;
+    line-height: 1.35 !important;
+  }
+
 }
 
 

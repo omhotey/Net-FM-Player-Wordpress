@@ -28,3 +28,5 @@
 /kilo.json export-ignore
 /PRD.md export-ignore
 /ROADMAP.md export-ignore
+/PRODUCTION-PLAN.md export-ignore
+/tests export-ignore

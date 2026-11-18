@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "net-fm-player/player",
+  "version": "0.3.0",
+  "title": "NET FM Player",
+  "category": "widgets",
+  "icon": "playlist-audio",
+  "description": "AzuraCast and direct-stream radio player.",
+  "textdomain": "net-fm-player",
+  "style": "net-fm-player",
+  "editorScript": "file:./assets/net-fm-player-block.js",
+  "attributes": {
+    "station": {
+      "type": "string",
+      "default": ""
+    },
+    "stations": {
+      "type": "string",
+      "default": ""
+    },
+    "theme": {
+      "type": "string",
+      "default": "inherit"
+    },
+    "layout": {
+      "type": "string",
+      "default": "inherit"
+    }
+  },
+  "supports": {
+    "html": false,
+    "align": ["wide", "full"]
+  }
+}
