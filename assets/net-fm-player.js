@@ -95,6 +95,7 @@
     var bufferingTimer = null;
     var stalledTimer = null;
     var metadataController = null;
+    var metadataRequestId = 0;
     var audioContext = null;
     var analyser = null;
     var sourceNode = null;
@@ -162,6 +163,13 @@
     var title = root.querySelector('[data-nfp-title]');
     var artist = root.querySelector('[data-nfp-artist]');
     var accessibleTrack = root.querySelector('[data-nfp-track-accessible]');
+    var trackArea = root.querySelector('[data-nfp-track]');
+    var titleWindow = root.querySelector('[data-nfp-title-window]');
+    var copyTrackButton = root.querySelector('[data-nfp-copy-track]');
+    var titleObserver = null;
+    var titleMeasureFrame = null;
+    var longPressTimer = null;
+    var touchStart = null;
     var stationLabel = root.querySelector('[data-nfp-station-label]');
     var live = root.querySelector('[data-nfp-live]');
     var count = root.querySelector('[data-nfp-count]');
@@ -201,6 +209,61 @@
       if (destroyed) return;
       var width = root.getBoundingClientRect().width;
       root.classList.toggle('is-narrow', width <= 420);
+      scheduleTitleMeasure();
+    }
+
+    function scheduleTitleMeasure() {
+      if (!title || !titleWindow || titleMeasureFrame) return;
+      titleMeasureFrame = window.requestAnimationFrame(function () {
+        titleMeasureFrame = null;
+        if (destroyed) return;
+        var distance = Math.max(0, Math.ceil(title.scrollWidth - titleWindow.clientWidth));
+        titleWindow.style.setProperty('--nfp-title-distance', distance + 'px');
+        titleWindow.style.setProperty('--nfp-title-duration', Math.max(5, distance / 28 + 3) + 's');
+        titleWindow.classList.toggle('is-overflowing', distance > 1);
+      });
+    }
+
+    function cancelLongPress() {
+      if (longPressTimer) window.clearTimeout(longPressTimer);
+      longPressTimer = null;
+      touchStart = null;
+    }
+
+    if (trackArea && copyTrackButton) {
+      trackArea.addEventListener('contextmenu', function (event) {
+        event.preventDefault();
+        copyTrackButton.hidden = false;
+        copyTrackButton.focus();
+      });
+      trackArea.addEventListener('pointerdown', function (event) {
+        if (event.pointerType !== 'touch' || event.target === copyTrackButton) return;
+        cancelLongPress();
+        touchStart = { x: event.clientX, y: event.clientY };
+        longPressTimer = window.setTimeout(function () {
+          longPressTimer = null;
+          copyTrackButton.hidden = false;
+        }, 600);
+      });
+      trackArea.addEventListener('pointermove', function (event) {
+        if (touchStart && (Math.abs(event.clientX - touchStart.x) > 10 || Math.abs(event.clientY - touchStart.y) > 10)) cancelLongPress();
+      });
+      trackArea.addEventListener('pointerup', cancelLongPress);
+      trackArea.addEventListener('pointercancel', cancelLongPress);
+      copyTrackButton.addEventListener('click', function () {
+        var text = accessibleTrack ? accessibleTrack.textContent.trim() : '';
+        if (!text || !navigator.clipboard || !navigator.clipboard.writeText) {
+          showStatus('Не удалось скопировать название');
+          return;
+        }
+        navigator.clipboard.writeText(text).then(function () {
+          if (!destroyed) { copyTrackButton.hidden = true; showStatus('Название скопировано'); }
+        }).catch(function () { if (!destroyed) showStatus('Не удалось скопировать название'); });
+      });
+    }
+    if (title && typeof window.MutationObserver === 'function') {
+      titleObserver = new window.MutationObserver(scheduleTitleMeasure);
+      titleObserver.observe(title, { childList: true, characterData: true, subtree: true });
     }
 
     function isCurrentStream(url) {
@@ -760,6 +823,8 @@
       if (pendingDuration > 0 && !reduceMotion) {
         if (initialMetadataRevealTimer) window.clearTimeout(initialMetadataRevealTimer);
         initialMetadataRevealTimer = window.setTimeout(function () {
+          initialMetadataRevealTimer = null;
+          if (destroyed || currentTrackKey !== payload.key || pendingTrackKey) return;
           commitInitialMetadata(payload);
         }, pendingDuration);
         return;
@@ -997,6 +1062,10 @@
     function beginTrackTransition(payload) {
       var transitionId = ++trackTransitionId;
       pendingTrackKey = payload.key;
+      if (initialMetadataRevealTimer) {
+        window.clearTimeout(initialMetadataRevealTimer);
+        initialMetadataRevealTimer = null;
+      }
       stopBoundaryPolling();
       if (activeCoverLoad) activeCoverLoad.cancel();
       if (lateArtTimer) {
@@ -1214,6 +1283,7 @@
       showStatus('');
       reconnects = 0;
       fallbackAttempted = false;
+      refresh();
       startPlayback(false);
     }
 
@@ -1353,6 +1423,7 @@
 
     function refresh() {
       if (destroyed) return;
+      var requestId = ++metadataRequestId;
 
       if (!config.apiUrl) {
         title.textContent = config.stationLabel;
@@ -1377,6 +1448,7 @@
           return response.json();
         })
         .then(function (data) {
+          if (destroyed || requestId !== metadataRequestId) return;
           if (!fallbackAttempted) showStatus('');
           var nowPlaying = data && data.now_playing ? data.now_playing : {};
           var song = nowPlaying.song || {};
@@ -1426,6 +1498,7 @@
           hasMetadata = true;
         })
         .catch(function (fetchError) {
+          if (destroyed || requestId !== metadataRequestId) return;
           if (fetchError && fetchError.name === 'AbortError') return;
           if (!hasMetadata) {
             clearMetadataAnimation();
@@ -1446,6 +1519,7 @@
     function destroy() {
       if (destroyed) return;
       destroyed = true;
+      metadataRequestId++;
       playRequested = false;
 
       if (root._nfpTimer) window.clearInterval(root._nfpTimer);
@@ -1464,6 +1538,9 @@
       if (coverRevealAnimation) coverRevealAnimation.cancel();
       if (activeCoverLoad) activeCoverLoad.cancel();
       if (metadataController) metadataController.abort();
+      if (titleObserver) titleObserver.disconnect();
+      if (titleMeasureFrame) window.cancelAnimationFrame(titleMeasureFrame);
+      cancelLongPress();
       if (initialMetadataRevealTimer) window.clearTimeout(initialMetadataRevealTimer);
       clearMetadataAnimation();
       stopVisualizer(false);

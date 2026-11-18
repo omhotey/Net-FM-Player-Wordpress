@@ -37,6 +37,8 @@ The plugin requests the configured AzuraCast Now Playing endpoint directly from 
 * Added station cards, public station catalog and station selection in the player.
 * Added stream quality labels and bounded fallback to an available stream.
 * Improved Gutenberg, Elementor and responsive player behavior.
+* Keep track titles on one line with scrolling and offer copying the current track.
+* Refresh metadata on play and ignore outdated metadata responses.
 
 = 0.2.0 =
 * Added the dynamic Gutenberg block.

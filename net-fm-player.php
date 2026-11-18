@@ -760,8 +760,11 @@ JS,
 
             <div class="nfp__info">
                 <div class="nfp__kicker"><?php echo esc_html__('Сейчас играет', 'net-fm-player'); ?></div>
-                <div class="nfp__title" data-nfp-title aria-hidden="true"><?php echo esc_html($initial_title); ?></div>
-                <div class="nfp__artist" data-nfp-artist aria-hidden="true"><?php echo esc_html($initial_artist); ?></div>
+                <div class="nfp__track" data-nfp-track>
+                    <div class="nfp__title-window" data-nfp-title-window><div class="nfp__title" data-nfp-title aria-hidden="true"><?php echo esc_html($initial_title); ?></div></div>
+                    <div class="nfp__artist" data-nfp-artist aria-hidden="true"><?php echo esc_html($initial_artist); ?></div>
+                    <button class="nfp__copy-track" data-nfp-copy-track type="button" hidden><?php echo esc_html__('Копировать название и исполнителя', 'net-fm-player'); ?></button>
+                </div>
                 <div class="nfp__sr-only" data-nfp-track-accessible aria-live="polite" aria-atomic="true"><?php echo esc_html(trim($initial_title . ' — ' . $initial_artist)); ?></div>
                 <div class="nfp__status" data-nfp-status role="status" hidden></div>
             </div>
