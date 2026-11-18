@@ -8,5 +8,5 @@ return [
         'wp-i18n',
         'wp-server-side-render',
     ],
-    'version' => '0.3.0.1',
+    'version' => '0.3.1',
 ];

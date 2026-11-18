@@ -3,11 +3,12 @@
  * Plugin Name: NET FM Player for AzuraCast
  * Plugin URI: https://vibeservice.ru/
  * Description: AzuraCast and direct-stream radio player with shortcode, Gutenberg and Elementor integrations.
- * Version: 0.3.0
+ * Version: 0.3.1
  * Requires at least: 6.5
  * Requires PHP: 8.2
  * Author: Юрий Струк (omhotey)
  * Author URI: https://vibeservice.ru/
+ * Update URI: https://github.com/omhotey/net-fm-player
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: net-fm-player
@@ -19,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 final class Net_Fm_Player_Plugin
 {
-    public const VERSION = '0.3.0';
+    public const VERSION = '0.3.1';
     public const SHORTCODE = 'net_fm_player';
     public const OPTION_NAME = 'net_fm_player_options';
 
@@ -45,6 +46,8 @@ final class Net_Fm_Player_Plugin
         add_action('elementor/widgets/register', [$this, 'register_elementor_widget']);
         add_action('elementor/preview/enqueue_scripts', [$this, 'enqueue_assets']);
         add_action('rest_api_init', [$this, 'register_station_api']);
+        require_once __DIR__ . '/includes/class-net-fm-player-updater.php';
+        Net_Fm_Player_Updater::register();
     }
 
     public static function defaults()

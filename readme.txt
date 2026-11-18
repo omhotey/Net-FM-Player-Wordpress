@@ -4,7 +4,7 @@ Tags: radio, azuracast, audio, streaming, elementor
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 8.2
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -32,6 +32,9 @@ The plugin requests the configured AzuraCast Now Playing endpoint directly from 
 4. Insert `[net_fm_player]`, the NET FM Player block, or the Elementor widget.
 
 == Changelog ==
+
+= 0.3.1 =
+* Added WordPress update checks for stable NET FM Player releases on GitHub.
 
 = 0.3.0 =
 * Added station cards, public station catalog and station selection in the player.
