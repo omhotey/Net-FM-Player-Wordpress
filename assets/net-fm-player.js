@@ -3,7 +3,8 @@
   var RECONNECT_DELAY_MS = 1800;
   var MAX_RECONNECTS = 3;
   var TONEARM_START_ANGLE = 87;
-  var TONEARM_END_ANGLE = 108;
+  // Keep the full cartridge on the grooves, outside the centre label.
+  var TONEARM_END_ANGLE = 101;
   var TONEARM_REST_ANGLE = 76;
   var TRACK_CHANGE_LEAD_SECONDS = 4;
   var TONEARM_RETURN_LEAD_SECONDS = 0.55;
