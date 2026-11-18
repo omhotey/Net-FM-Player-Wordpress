@@ -121,6 +121,7 @@
     var tonearmFrameAt = 0;
     var tonearmClockInitialized = false;
     var tonearmClockRunning = false;
+    var tonearmNeedsPlaybackSync = false;
     var tonearmFrame = null;
     var tonearmLastBaseAngle = TONEARM_START_ANGLE;
     var currentTrackKey = '';
@@ -1130,7 +1131,23 @@
 
       if (Number.isFinite(duration) && duration > 0 && Number.isFinite(elapsed) && elapsed >= 0) {
         trackDuration = duration;
-        if (!tonearmClockInitialized) {
+        if (playRequested && tonearmNeedsPlaybackSync && !trackChangeActive && !trackEndReached) {
+          // A live stream keeps advancing while paused. Align once on play;
+          // ordinary metadata drift still uses the slower bounded correction.
+          var arm = root.querySelector('.nfp__vinyl-arm');
+          var before = arm && !reduceMotion && typeof arm.animate === 'function' ? window.getComputedStyle(arm).transform : '';
+          trackElapsed = Math.min(elapsed, duration);
+          tonearmClockInitialized = true;
+          tonearmCatchupRemaining = 0;
+          tonearmLastBaseAngle = TONEARM_START_ANGLE;
+          setTonearmAngle(TONEARM_START_ANGLE + ((TONEARM_END_ANGLE - TONEARM_START_ANGLE) * (trackElapsed / duration)));
+          if (before && before !== 'none') {
+            var after = window.getComputedStyle(arm).transform;
+            if (after && after !== before) arm.animate([{ transform: before }, { transform: after }], { duration: 550, easing: 'ease-out' });
+          }
+          tonearmNeedsPlaybackSync = false;
+          if (tonearmClockRunning) tonearmFrameAt = performance.now();
+        } else if (!tonearmClockInitialized) {
           trackElapsed = Math.min(elapsed, duration);
           tonearmClockInitialized = true;
           tonearmLastBaseAngle = TONEARM_START_ANGLE;
@@ -1283,8 +1300,9 @@
       showStatus('');
       reconnects = 0;
       fallbackAttempted = false;
-      refresh();
+      tonearmNeedsPlaybackSync = true;
       startPlayback(false);
+      refresh();
     }
 
     function pause() {
