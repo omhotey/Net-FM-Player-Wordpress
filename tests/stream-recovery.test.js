@@ -58,3 +58,22 @@ playback.play();
 assert.equal(playback.attempts[1], true, 'Resume reopens the live stream instead of old buffered audio');
 assert.equal(playback.explicitlyPaused, false);
 console.log('Explicit pause and live resume checks passed');
+
+const classes = new Set(['is-playing']);
+const mechanics = vm.createContext({
+  bufferingTimer: null, trackEndTimer: 42, tonearmClockRunning: true, tonearmFrameAt: 1,
+  audio: { paused: false }, events: [],
+  root: { classList: { contains: value => classes.has(value), toggle(value, enabled) { enabled ? classes.add(value) : classes.delete(value); } } },
+  window: { clearTimeout: id => mechanics.events.push('clear:' + id) },
+  stopTonearmAnimation() { mechanics.events.push('stop'); },
+  resumeTonearmClock() { mechanics.events.push('resume'); },
+  renderLiveStatus() {}
+});
+vm.runInContext(extract('pauseTonearmClock') + '\n' + extract('setBuffering'), mechanics);
+mechanics.setBuffering(true);
+assert.equal(mechanics.trackEndTimer, null, 'Buffering cancels predicted track-end timer');
+assert.equal(mechanics.tonearmClockRunning, false, 'Buffering freezes tonearm');
+assert.ok(mechanics.events.includes('clear:42'));
+mechanics.setBuffering(false);
+assert.ok(mechanics.events.includes('resume'), 'Playback recovery resumes tonearm');
+console.log('Tonearm freezes while buffering and clears predicted end timer');

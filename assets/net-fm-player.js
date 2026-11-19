@@ -338,6 +338,8 @@
       }
       var changed = root.classList.contains('is-buffering') !== Boolean(value);
       root.classList.toggle('is-buffering', value);
+      if (value) pauseTonearmClock();
+      else if (root.classList.contains('is-playing') && !audio.paused) resumeTonearmClock();
       if (changed) renderLiveStatus();
     }
 
@@ -905,6 +907,10 @@
     }
 
     function pauseTonearmClock() {
+      if (trackEndTimer) {
+        window.clearTimeout(trackEndTimer);
+        trackEndTimer = null;
+      }
       if (!tonearmClockRunning) return;
       tonearmFrameAt = 0;
       tonearmClockRunning = false;
