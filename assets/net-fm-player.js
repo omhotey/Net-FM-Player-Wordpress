@@ -11,7 +11,7 @@
   var TRACK_CHANGE_DURATION_MS = 520;
   var TONEARM_SYNC_TOLERANCE_SECONDS = 2;
   var TONEARM_MAX_CATCHUP_RATE = 0.12;
-  var STALE_PREVIOUS_TRACK_GRACE_MS = 30000;
+  var ART_RETRY_DELAY_MS = 60000;
   var activePlayers = [];
   var removalObserver = null;
 
@@ -115,6 +115,7 @@
     var coverRevealTimer = null;
     var coverRevealAnimation = null;
     var playRequested = false;
+    var explicitlyPaused = false;
     var hasMetadata = false;
     var trackElapsed = 0;
     var trackDuration = 0;
@@ -127,9 +128,10 @@
     var tonearmLastBaseAngle = TONEARM_START_ANGLE;
     var currentTrackKey = '';
     var pendingTrackKey = '';
-    var previousTrackKey = '';
-    var ignorePreviousTrackUntil = 0;
-    var nextTrackCache = { key: '', coverSrc: '', ready: false };
+    var pendingMetadataSignature = '';
+    var currentMetadataSignature = '';
+    var nextTrackCache = { key: '', art: '', metadata: null, coverSrc: '', ready: false };
+    var nextTrackGeneration = 0;
     var trackChangeActive = false;
     var trackEndReached = false;
     var queuedTrackPayload = null;
@@ -431,9 +433,9 @@
       fitStationPlaceholderName();
     }
 
-    function preloadCover(src) {
+    function preloadCover(src, speculative) {
       if (!art || !cover) return Promise.resolve('');
-      if (src && failedArtUrls[src]) return Promise.resolve('');
+      if (src && failedArtUrls[src] && Date.now() - failedArtUrls[src] < ART_RETRY_DELAY_MS) return Promise.resolve('');
       if (!src || src === currentArt) return Promise.resolve(src || '');
 
       return new Promise(function (resolve) {
@@ -442,7 +444,7 @@
           resolve(src);
         };
         loader.onerror = function () {
-          failedArtUrls[src] = true;
+          if (!speculative) failedArtUrls[src] = Date.now();
           resolve('');
         };
         loader.src = src;
@@ -810,6 +812,7 @@
     function commitInitialMetadata(payload) {
       initialMetadataRevealTimer = null;
       if (destroyed) return;
+      currentMetadataSignature = metadataSignature(payload);
       setCover(payload.art);
       revealTrackMetadata(payload.title, payload.artist);
       syncTonearm(payload.nowPlaying);
@@ -940,27 +943,71 @@
       return song.id || song.text || textKey;
     }
 
+    function trackOccurrenceKey(song, nowPlaying) {
+      var key = trackKey(song);
+      var playedAt = Number(nowPlaying && nowPlaying.played_at);
+      return key && Number.isFinite(playedAt) && playedAt > 0 ? key + '|' + playedAt : key;
+    }
+
+    function confirmedTrackAction(current, pending, actual) {
+      if (!current) return 'initial';
+      if (pending) return actual && actual !== pending ? 'transition' : 'wait';
+      return actual && actual !== current ? 'transition' : 'sync';
+    }
+
+    function metadataSignature(payload) {
+      return JSON.stringify([payload.title || '', payload.artist || '', payload.art || '']);
+    }
+
+    function hasMatchingPrefetchedCover(song) {
+      var actualArt = song && typeof song.art === 'string' ? song.art : '';
+      return nextTrackCache.key === trackKey(song) && nextTrackCache.art === actualArt && nextTrackCache.ready;
+    }
+
+    function repairMetadataEncoding(text) {
+      if (!/[\u00c0-\u00ff]{3}/.test(text) || typeof TextDecoder !== 'function') return text;
+      try {
+        var western = new TextDecoder('windows-1252', { fatal: true });
+        var inverse = {};
+        for (var n = 0; n < 256; n++) {
+          try { inverse[western.decode(new Uint8Array([n]))] = n; } catch (_) { /* Undefined byte. */ }
+        }
+        var bytes = [];
+        for (var character of text) {
+          if (!Object.prototype.hasOwnProperty.call(inverse, character)) return text;
+          bytes.push(inverse[character]);
+        }
+        var repaired = new TextDecoder('windows-1251', { fatal: true }).decode(new Uint8Array(bytes));
+        return (repaired.match(/[А-Яа-яЁё]/g) || []).length >= 4 ? repaired : text;
+      } catch (_) { return text; }
+    }
+
     function usableMetadataText(value, fallback) {
       var text = typeof value === 'string' ? value.trim() : '';
       if (!text || /\uFFFD/.test(text)) return fallback;
-      return text;
+      return repairMetadataEncoding(text);
     }
 
     function prepareNextTrack(playingNext) {
       var nextSong = playingNext && playingNext.song ? playingNext.song : playingNext;
       var nextKey = trackKey(nextSong);
+      var nextArt = nextSong && typeof nextSong.art === 'string' ? nextSong.art : '';
       if (!nextKey) {
-        nextTrackCache = { key: '', coverSrc: '', ready: false };
+        nextTrackGeneration++;
+        nextTrackCache = { key: '', art: '', metadata: null, coverSrc: '', ready: false };
         return;
       }
-      if (nextTrackCache.key === nextKey) return;
+      if (nextTrackCache.key === nextKey && nextTrackCache.art === nextArt) {
+        nextTrackCache.metadata = { title: nextSong.title || '', artist: nextSong.artist || '' };
+        return;
+      }
 
-      nextTrackCache = { key: nextKey, coverSrc: '', ready: false };
-      var expectedKey = nextKey;
-      preloadCover(nextSong && nextSong.art).then(function (coverSrc) {
-        if (destroyed || nextTrackCache.key !== expectedKey) return;
+      var generation = ++nextTrackGeneration;
+      nextTrackCache = { key: nextKey, art: nextArt, metadata: { title: nextSong.title || '', artist: nextSong.artist || '' }, coverSrc: '', ready: false };
+      preloadCover(nextArt, true).then(function (coverSrc) {
+        if (destroyed || generation !== nextTrackGeneration) return;
         nextTrackCache.coverSrc = coverSrc;
-        nextTrackCache.ready = true;
+        nextTrackCache.ready = Boolean(coverSrc) || !nextArt;
       });
     }
 
@@ -1003,10 +1050,9 @@
         window.clearTimeout(tonearmReturnTimer);
         tonearmReturnTimer = null;
       }
-      returnTonearmToStart();
-      showStationPlaceholder(trackTransitionId);
-      startMetadataScramble();
-      if (queuedTrackPayload) beginTrackTransition(queuedTrackPayload);
+      // Duration and queue entries are predictions. Keep the current track
+      // visible until the server confirms another now-playing occurrence.
+      startBoundaryPolling();
     }
 
     function scheduleEndOfTrackTransition(remaining) {
@@ -1028,10 +1074,10 @@
 
     function commitTrackTransition(transitionId, payload, coverSrc) {
       if (destroyed || transitionId !== trackTransitionId) return;
-      previousTrackKey = currentTrackKey;
-      ignorePreviousTrackUntil = previousTrackKey ? Date.now() + STALE_PREVIOUS_TRACK_GRACE_MS : 0;
       currentTrackKey = payload.key;
       pendingTrackKey = '';
+      pendingMetadataSignature = '';
+      currentMetadataSignature = metadataSignature(payload);
       queuedTrackPayload = null;
       trackEndReached = false;
       if (tonearmReturnTimer) {
@@ -1064,6 +1110,7 @@
     function beginTrackTransition(payload) {
       var transitionId = ++trackTransitionId;
       pendingTrackKey = payload.key;
+      pendingMetadataSignature = metadataSignature(payload);
       if (initialMetadataRevealTimer) {
         window.clearTimeout(initialMetadataRevealTimer);
         initialMetadataRevealTimer = null;
@@ -1180,7 +1227,7 @@
     if (art) {
       art.addEventListener('error', function () {
         var failedArt = currentArt;
-        if (failedArt) failedArtUrls[failedArt] = true;
+        if (failedArt) failedArtUrls[failedArt] = Date.now();
         currentArt = '';
         setCover(failedArt === config.fallbackArt ? '' : config.fallbackArt);
       });
@@ -1302,12 +1349,16 @@
       reconnects = 0;
       fallbackAttempted = false;
       tonearmNeedsPlaybackSync = true;
-      startPlayback(false);
+      var resumeLive = explicitlyPaused;
+      explicitlyPaused = false;
+      // Reopen a paused live stream so the browser does not resume old buffered audio.
+      startPlayback(resumeLive);
       refresh();
     }
 
     function pause() {
       playRequested = false;
+      explicitlyPaused = true;
       clearReconnectTimer();
       clearStalledTimer();
       audio.pause();
@@ -1471,15 +1522,14 @@
           if (!fallbackAttempted) showStatus('');
           var nowPlaying = data && data.now_playing ? data.now_playing : {};
           var song = nowPlaying.song || {};
-          var nextTrackKey = trackKey(song);
-          var elapsed = Number(nowPlaying.elapsed);
-          var trackRestarted = Boolean(currentTrackKey) && Number.isFinite(elapsed) && elapsed >= 0 && elapsed + 2 < trackElapsed;
-          var hasPreloadedCover = nextTrackCache.key === nextTrackKey && nextTrackCache.ready;
+          var nextTrackKey = trackOccurrenceKey(song, nowPlaying);
+          var actualArt = typeof song.art === 'string' ? song.art : '';
+          var hasPreloadedCover = hasMatchingPrefetchedCover(song);
           var payload = {
             key: nextTrackKey || currentTrackKey,
             title: usableMetadataText(song.title || song.text, config.stationLabel),
             artist: usableMetadataText(song.artist, usableMetadataText(data.station && data.station.description, 'Прямой эфир')),
-            art: song.art || '',
+            art: actualArt,
             preloadedCoverReady: hasPreloadedCover,
             preloadedCover: hasPreloadedCover ? nextTrackCache.coverSrc : '',
             nowPlaying: nowPlaying,
@@ -1495,22 +1545,31 @@
             ? data.listeners.current + ' СЛУШАЮТ'
             : '— СЛУШАЮТ';
 
-          if (!currentTrackKey) {
+          // Keep the last displayed track while the listener has paused playback.
+          // Listener counts and speculative preloading can still update.
+          if (explicitlyPaused && hasMetadata && !trackChangeActive) {
+            prepareNextTrack(data && data.playing_next ? data.playing_next : null);
+            return;
+          }
+
+          var trackAction = confirmedTrackAction(currentTrackKey, pendingTrackKey, payload.key);
+          if (trackAction === 'wait' && pendingTrackKey === payload.key && pendingMetadataSignature !== metadataSignature(payload)) {
+            trackAction = 'transition';
+          }
+          if (trackAction === 'initial') {
             showInitialMetadata(payload);
-          } else if (pendingTrackKey) {
-            // During a transition AzuraCast may briefly repeat either the old
-            // committed payload or the pending one. Neither starts generation two.
-            if (payload.key !== pendingTrackKey && payload.key !== currentTrackKey) {
-              beginTrackTransition(payload);
-            }
-          } else if (payload.key && payload.key !== currentTrackKey) {
-            if (payload.key === previousTrackKey && Date.now() < ignorePreviousTrackUntil) {
-              return;
-            }
+          } else if (trackAction === 'transition') {
             // A fresh API identity is authoritative. Waiting for the old local
             // duration leaves live audio, metadata, artwork and tonearm out of sync.
             beginTrackTransition(payload);
-          } else if (!trackChangeActive && !pendingTrackKey) {
+          } else if (trackAction === 'sync' && !trackChangeActive) {
+            if (currentMetadataSignature && currentMetadataSignature !== metadataSignature(payload)) {
+              currentMetadataSignature = metadataSignature(payload);
+              revealTrackMetadata(payload.title, payload.artist);
+              setCover(payload.art);
+            } else if (payload.art && currentArt !== payload.art && !pendingArt && failedArtUrls[payload.art] && Date.now() - failedArtUrls[payload.art] >= ART_RETRY_DELAY_MS) {
+              setCover(payload.art);
+            }
             syncTonearm(nowPlaying);
           }
           prepareNextTrack(data && data.playing_next ? data.playing_next : null);

@@ -44,7 +44,12 @@ final class Net_Fm_Player_Updater
             return $update;
         }
 
-        $release = get_site_transient(self::CACHE_KEY);
+        // The native "Check again" action should actually ask GitHub rather
+        // than reuse our six-hour cache. Other checks retain the rate limit.
+        $force_refresh = is_admin() && current_user_can('update_plugins')
+            && ($GLOBALS['pagenow'] ?? '') === 'update-core.php'
+            && !empty($_GET['force-check']); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+        $release = $force_refresh ? false : get_site_transient(self::CACHE_KEY);
         $fetched = false;
         if (!is_array($release)) {
             $response = wp_safe_remote_get(self::API, [

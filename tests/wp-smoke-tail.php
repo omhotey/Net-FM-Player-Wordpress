@@ -38,5 +38,10 @@ check(isset($existing['stations']['one']) && !isset($existing['stations']['two']
 $_POST['option_page'] = 'net_fm_player_settings';
 $saved = $plugin->sanitize_options(['stations' => ['one' => $one]]);
 check(isset($saved['stations']['two']), 'Truncated settings submission must preserve existing stations');
+$_POST[Net_Fm_Player_Plugin::OPTION_NAME]['submission_complete'] = '1';
+$first_pass = $plugin->sanitize_options(['stations' => ['one' => $one], 'submission_complete' => '1']);
+$second_pass = $plugin->sanitize_options($first_pass);
+check(isset($second_pass['stations']['one']) && !isset($second_pass['stations']['two']), 'Repeated sanitization rejected a complete submission');
+unset($_POST[Net_Fm_Player_Plugin::OPTION_NAME]);
 unset($_POST['option_page']);
 echo "Synthetic station rendering and settings checks passed\n";

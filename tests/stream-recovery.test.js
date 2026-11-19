@@ -40,3 +40,21 @@ context.reconnect();
 assert.equal(context.playRequested, false, 'Failure of the backup must stop rather than loop');
 assert.equal(context.attempts.length, 1);
 console.log('Stream selection and bounded fallback checks passed');
+
+const playback = vm.createContext({
+  explicitlyPaused: false, playRequested: false, reconnects: 0, fallbackAttempted: false,
+  tonearmNeedsPlaybackSync: false, attempts: [],
+  showError() {}, showStatus() {}, clearReconnectTimer() {}, clearStalledTimer() {},
+  setPlaying() {}, setBuffering() {}, refresh() {},
+  audio: { pause() {} },
+  startPlayback(force) { playback.attempts.push(force); }
+});
+vm.runInContext(extract('play') + '\n' + extract('pause'), playback);
+playback.play();
+assert.equal(playback.attempts[0], false, 'First play does not unnecessarily reload the stream');
+playback.pause();
+assert.equal(playback.explicitlyPaused, true);
+playback.play();
+assert.equal(playback.attempts[1], true, 'Resume reopens the live stream instead of old buffered audio');
+assert.equal(playback.explicitlyPaused, false);
+console.log('Explicit pause and live resume checks passed');

@@ -94,7 +94,7 @@ $markup = $player->render_shortcode([
     'stream_primary_label' => '128 kbps',
     'stream_secondary' => 'https://stream.net-fm.ru/listen/upwaveradio/stream320',
     'stream_secondary_label' => '320 kbps',
-    'stream_hls_url' => $hls ? 'https://stream.net-fm.ru/listen/upwaveradio/hls.m3u8' : '',
+    'stream_hls_url' => $hls ? 'https://stream.net-fm.ru/hls/upwaveradio/live.m3u8' : '',
     'fallback_art' => 'station-logo.svg',
     'theme' => $theme,
     'layout' => $layout,
@@ -133,7 +133,7 @@ $markup = $player->render_shortcode([
                         <label>Название основного потока<input name="primaryLabel" type="text" value="128 kbps"></label>
                         <label>URL дополнительного потока<input name="secondaryUrl" type="url" inputmode="url" value="https://stream.net-fm.ru/listen/upwaveradio/stream320"></label>
                         <label>Название дополнительного потока<input name="secondaryLabel" type="text" value="320 kbps"></label>
-                        <label class="nfp-lab__field--wide">URL HLS-потока<input name="hlsUrl" type="url" inputmode="url" value="<?php echo esc_attr($hls ? 'https://stream.net-fm.ru/listen/upwaveradio/hls.m3u8' : ''); ?>"></label>
+                        <label class="nfp-lab__field--wide">URL HLS-потока<input name="hlsUrl" type="url" inputmode="url" value="<?php echo esc_attr($hls ? 'https://stream.net-fm.ru/hls/upwaveradio/live.m3u8' : ''); ?>"></label>
                         <label>Название HLS-потока<input name="hlsLabel" type="text" value="Авто"></label>
                         <label>Поток по умолчанию<select name="defaultStream"><option value="primary">Основной</option><option value="secondary">Дополнительный</option><option value="hls">Авто (HLS)</option></select></label>
                         <label class="nfp-lab__check"><input name="metadataEnabled" type="checkbox" <?php checked(!$direct); ?>> Получать данные трека</label>

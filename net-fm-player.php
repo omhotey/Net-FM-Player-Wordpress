@@ -3,7 +3,7 @@
  * Plugin Name: NET FM Player for AzuraCast
  * Plugin URI: https://vibeservice.ru/
  * Description: AzuraCast and direct-stream radio player with shortcode, Gutenberg and Elementor integrations.
- * Version: 0.3.1
+ * Version: 0.3.2
  * Requires at least: 6.5
  * Requires PHP: 8.2
  * Author: Юрий Струк (omhotey)
@@ -20,7 +20,7 @@ if (!defined('ABSPATH')) {
 
 final class Net_Fm_Player_Plugin
 {
-    public const VERSION = '0.3.1';
+    public const VERSION = '0.3.2';
     public const SHORTCODE = 'net_fm_player';
     public const OPTION_NAME = 'net_fm_player_options';
 
@@ -218,7 +218,9 @@ JS,
         $input = is_array($input) ? $input : [];
         // options.php checks the settings nonce before invoking this callback.
         // phpcs:ignore WordPress.Security.NonceVerification.Missing
-        if (isset($_POST['option_page']) && $_POST['option_page'] === 'net_fm_player_settings' && empty($input['submission_complete'])) {
+        // WordPress can sanitize twice when adding a new option. The cleaned
+        // value no longer contains the marker, so inspect the original form.
+        if (isset($_POST['option_page']) && $_POST['option_page'] === 'net_fm_player_settings' && empty($_POST[self::OPTION_NAME]['submission_complete'])) {
             add_settings_error(self::OPTION_NAME, 'nfp_incomplete', __('Настройки не сохранены: форма была передана не полностью. Проверьте ограничение max_input_vars на сервере.', 'net-fm-player'), 'error');
             return self::get_options();
         }
@@ -553,6 +555,16 @@ JS,
             ],
         ];
 
+        // Prefer the configured 128 kbps direct stream; preserve the saved settings.
+        if (!empty($config['streams']['primary']) && preg_match('/\b128\b/u', $primary_label)) {
+            $config['defaultStream'] = 'primary';
+        } elseif (!empty($config['streams']['secondary']) && preg_match('/\b128\b/u', $secondary_label)) {
+            $config['defaultStream'] = 'secondary';
+        } elseif (!empty($config['streams']['primary'])) {
+            $config['defaultStream'] = 'primary';
+        } elseif (!empty($config['streams']['secondary'])) {
+            $config['defaultStream'] = 'secondary';
+        }
         if (empty($config['streams'][$config['defaultStream']])) {
             foreach (['primary', 'secondary', 'hls'] as $stream_key) {
                 if (!empty($config['streams'][$stream_key])) {
@@ -779,6 +791,9 @@ JS,
 
                 <div class="nfp__quality" role="group" aria-label="<?php echo esc_attr__('Поток', 'net-fm-player'); ?>">
                     <?php foreach ($config['streams'] as $stream_key => $stream_url) : ?>
+                        <?php if ($stream_key === 'hls') : ?>
+                            <?php continue; ?>
+                        <?php endif; ?>
                         <?php if (!$stream_url) : ?>
                             <?php continue; ?>
                         <?php endif; ?>
