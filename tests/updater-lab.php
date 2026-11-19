@@ -7,7 +7,7 @@ function nfp_update_assert($condition, $message) {
     if (!$condition) { fwrite(STDERR, $message . PHP_EOL); exit(1); }
 }
 $file = 'net-fm-player/net-fm-player.php';
-$asset = 'https://github.com/omhotey/net-fm-player/releases/download/v0.3.2/net-fm-player-0.3.2.zip';
+$asset = 'https://github.com/omhotey/Net-FM-Player-Wordpress/releases/download/v0.3.2/net-fm-player-0.3.2.zip';
 $fixture = ['tag_name' => 'v0.3.2', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.2.zip', 'browser_download_url' => $asset, 'state' => 'uploaded']]];
 $fixture_filter = static function () use (&$fixture) { return $fixture; };
 add_filter('pre_site_transient_net_fm_player_github_release', $fixture_filter);

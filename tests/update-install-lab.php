@@ -19,7 +19,7 @@ $log = ob_get_clean();
 nfp_update_test($installed === true, 'Candidate install failed');
 $plugin_file = 'net-fm-player/net-fm-player.php';
 require WP_PLUGIN_DIR . '/' . $plugin_file;
-$package = 'https://github.com/omhotey/net-fm-player/releases/download/v0.3.2/net-fm-player-0.3.2.zip';
+$package = 'https://github.com/omhotey/Net-FM-Player-Wordpress/releases/download/v0.3.2/net-fm-player-0.3.2.zip';
 $release = ['tag_name' => 'v0.3.2', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.2.zip', 'browser_download_url' => $package, 'state' => 'uploaded']]];
 $release_filter = static function () use ($release) { return $release; };
 add_filter('pre_site_transient_net_fm_player_github_release', $release_filter);

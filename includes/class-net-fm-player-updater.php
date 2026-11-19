@@ -6,8 +6,8 @@ if (!defined('ABSPATH')) {
 /** Supplies WordPress with verified release metadata from the public repository. */
 final class Net_Fm_Player_Updater
 {
-    private const REPOSITORY = 'https://github.com/omhotey/net-fm-player';
-    private const API = 'https://api.github.com/repos/omhotey/net-fm-player/releases/latest';
+    private const REPOSITORY = 'https://github.com/omhotey/Net-FM-Player-Wordpress';
+    private const API = 'https://api.github.com/repos/omhotey/Net-FM-Player-Wordpress/releases/latest';
     private const CACHE_KEY = 'net_fm_player_github_release';
 
     public static function register()

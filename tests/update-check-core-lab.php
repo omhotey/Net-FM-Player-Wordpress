@@ -5,7 +5,7 @@ define('DISABLE_WP_CRON', true);
 require '/var/www/html/wp-load.php';
 require_once ABSPATH . 'wp-admin/includes/plugin.php';
 require_once ABSPATH . 'wp-admin/includes/update.php';
-$package = 'https://github.com/omhotey/net-fm-player/releases/download/v0.3.2/net-fm-player-0.3.2.zip';
+$package = 'https://github.com/omhotey/Net-FM-Player-Wordpress/releases/download/v0.3.2/net-fm-player-0.3.2.zip';
 $release = ['tag_name' => 'v0.3.2', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.2.zip', 'browser_download_url' => $package, 'state' => 'uploaded']]];
 $captured = null;
 add_filter('pre_site_transient_net_fm_player_github_release', static function () use ($release) { return $release; });

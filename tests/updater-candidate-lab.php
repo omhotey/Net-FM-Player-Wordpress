@@ -27,13 +27,13 @@ $admins = get_users(['role' => 'administrator', 'number' => 1, 'fields' => 'ID']
 nfp_check_candidate(!empty($admins), 'Sandbox administrator not found');
 wp_set_current_user($admins[0]);
 $file = 'net-fm-player/net-fm-player.php';
-$old = ['tag_name' => 'v0.3.1', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.1.zip', 'browser_download_url' => 'https://github.com/omhotey/net-fm-player/releases/download/v0.3.1/net-fm-player-0.3.1.zip', 'state' => 'uploaded']]];
-$new = ['tag_name' => 'v0.3.3', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.3.zip', 'browser_download_url' => 'https://github.com/omhotey/net-fm-player/releases/download/v0.3.3/net-fm-player-0.3.3.zip', 'state' => 'uploaded']]];
+$old = ['tag_name' => 'v0.3.1', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.1.zip', 'browser_download_url' => 'https://github.com/omhotey/Net-FM-Player-Wordpress/releases/download/v0.3.1/net-fm-player-0.3.1.zip', 'state' => 'uploaded']]];
+$new = ['tag_name' => 'v0.3.3', 'draft' => false, 'prerelease' => false, 'assets' => [['name' => 'net-fm-player-0.3.3.zip', 'browser_download_url' => 'https://github.com/omhotey/Net-FM-Player-Wordpress/releases/download/v0.3.3/net-fm-player-0.3.3.zip', 'state' => 'uploaded']]];
 $calls = 0;
 $fail = false;
 add_filter('pre_site_transient_net_fm_player_github_release', static function () use ($old) { return $old; });
 add_filter('pre_http_request', static function ($preempt, $args, $url) use (&$calls, &$fail, $new) {
-    if ($url !== 'https://api.github.com/repos/omhotey/net-fm-player/releases/latest') { return $preempt; }
+    if ($url !== 'https://api.github.com/repos/omhotey/Net-FM-Player-Wordpress/releases/latest') { return $preempt; }
     $calls++;
     if ($fail) { return new WP_Error('nfp_network_failure', 'Test network failure'); }
     return ['headers' => [], 'body' => wp_json_encode($new), 'response' => ['code' => 200, 'message' => 'OK'], 'cookies' => []];
