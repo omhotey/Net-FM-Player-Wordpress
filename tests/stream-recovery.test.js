@@ -45,7 +45,7 @@ const playback = vm.createContext({
   explicitlyPaused: false, playRequested: false, reconnects: 0, fallbackAttempted: false,
   tonearmNeedsPlaybackSync: false, attempts: [],
   showError() {}, showStatus() {}, clearReconnectTimer() {}, clearStalledTimer() {},
-  setPlaying() {}, setBuffering() {}, refresh() {},
+  setPlaying() {}, setBuffering() {}, refresh() {}, stopIcy() {},
   audio: { pause() {} },
   startPlayback(force) { playback.attempts.push(force); }
 });
@@ -77,3 +77,24 @@ assert.ok(mechanics.events.includes('clear:42'));
 mechanics.setBuffering(false);
 assert.ok(mechanics.events.includes('resume'), 'Playback recovery resumes tonearm');
 console.log('Tonearm freezes while buffering and clears predicted end timer');
+
+let callbacks, startedDirect = false;
+function FailingIcy(audio, handlers) { callbacks = handlers; this.active = false; }
+FailingIcy.supported = () => true;
+FailingIcy.prototype.start = function () { this.active = true; return Promise.resolve(); };
+FailingIcy.prototype.stop = function () { this.active = false; };
+const fallback = vm.createContext({
+  icyUnavailable: false, icyTransport: null, icyTitle: '', icyPreparing: false,
+  streamKey: 'primary', playRequested: false, destroyed: false,
+  selectedStream: () => 'https://example.test/stream',
+  decodeIcy() {}, applyIcyTrack() {}, icyMatch() {}, preloadCover() {}, returnTonearmToStart() {},
+  scheduleBuffering() {}, setStream() { startedDirect = true; return true; },
+  audio: { play: () => Promise.resolve() }, window: { NetFmIcyPlayer: FailingIcy }
+});
+vm.runInContext(extract('stopIcy') + '\n' + extract('startPlayback'), fallback);
+fallback.startPlayback(false);
+assert.equal(startedDirect, false, 'Start uses the audio-bound transport');
+callbacks.onFailure(new Error('CORS unavailable'));
+assert.equal(startedDirect, true, 'Transport failure returns to the original direct stream');
+assert.equal(fallback.icyUnavailable, true, 'Failed transport is not retried in a loop');
+console.log('ICY failure switches to the direct stream');

@@ -480,7 +480,14 @@ JS,
 
         // File timestamps keep live bind-mounted development assets fresh in browsers.
         wp_register_style('net-fm-player', $base_url . 'assets/net-fm-player.css', [], (string) filemtime($style_path));
-        wp_register_script('net-fm-player', $base_url . 'assets/net-fm-player.js', [], (string) filemtime($script_path), true);
+        $dependencies = [];
+        foreach (['icy', 'mp3-frames', 'metadata-clock', 'track-match', 'icy-player'] as $component) {
+            $handle = 'net-fm-' . $component;
+            $file = 'assets/net-fm-' . $component . '.js';
+            wp_register_script($handle, $base_url . $file, [], (string) filemtime(__DIR__ . '/' . $file), true);
+            $dependencies[] = $handle;
+        }
+        wp_register_script('net-fm-player', $base_url . 'assets/net-fm-player.js', $dependencies, (string) filemtime($script_path), true);
     }
 
     public function enqueue_assets()

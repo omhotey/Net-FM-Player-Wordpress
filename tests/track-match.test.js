@@ -1,0 +1,11 @@
+const assert = require('node:assert/strict');
+const match = require('../assets/net-fm-track-match.js');
+const song = { id: 'a', artist: 'Artist', title: 'Song', text: 'Artist - Song', art: 'a.jpg' };
+const jingle = { id: 'j', artist: '', title: 'Jingle', art: '' };
+const data = { now_playing: { song }, song_history: [{ song }, { song: jingle }] };
+assert.equal(match(' ARTIST  -  SONG ', data).song.id, 'a');
+assert.equal(match('Jingle', data).song.id, 'j');
+assert.equal(match('Other', data), null);
+assert.equal(match('Artist - Song', { now_playing: { song }, playing_next: { song: { ...song, id: 'b', art: 'b.jpg' } } }), null, 'Ambiguous matches must not choose artwork');
+assert.equal(match('Artist - Song', { now_playing: { song }, song_history: [{ song: { ...song, art: 'changed.jpg' } }] }), null, 'Different covers are ambiguous');
+console.log('ICY title matching rejects ambiguous artwork and supports jingles');

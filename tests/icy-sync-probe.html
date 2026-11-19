@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><title>NET FM ICY sync probe</title>
+<h1>Тест синхронизации ICY и MP3</h1>
+<p>Изолированный эксперимент: данные и звук читаются одним соединением.</p>
+<button id="start">Начать тест</button> <button id="stop">Остановить</button>
+<p id="status">Ожидание</p><p id="track">Метка не получена</p>
+<audio id="audio" controls></audio><pre id="log"></pre>
+<script src="net-fm-icy.js"></script><script src="net-fm-mp3-frames.js"></script>
+<script>
+(() => {
+  const url = 'https://stream.net-fm.ru/listen/upwaveradio/stream128';
+  const audio = document.getElementById('audio'), status = document.getElementById('status'), track = document.getElementById('track'), log = document.getElementById('log');
+  let controller, media, objectUrl, buffer, chunks, markers, waiting, reader, pump, clock;
+  function note(message) { log.textContent += message + '\n'; }
+  function decodeMetadata(bytes) {
+    let text;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch (_) { text = new TextDecoder('windows-1251').decode(bytes); }
+    if (!/[\u00c0-\u00ff]{3}/.test(text)) return text;
+    try {
+      const decoder = new TextDecoder('windows-1252', { fatal: true }), inverse = {};
+      for (let i = 0; i < 256; i++) { try { inverse[decoder.decode(new Uint8Array([i]))] = i; } catch (_) {} }
+      const encoded = []; for (const c of text) { if (!(c in inverse)) return text; encoded.push(inverse[c]); }
+      const repaired = new TextDecoder('windows-1251', { fatal: true }).decode(new Uint8Array(encoded));
+      return (repaired.match(/[А-Яа-яЁё]/g) || []).length >= 4 ? repaired : text;
+    } catch (_) { return text; }
+  }
+  function cleanup() {
+    if (clock) clearInterval(clock); clock = null;
+    if (controller) controller.abort(); controller = null;
+    if (reader) reader.cancel().catch(() => {}); reader = null;
+    audio.pause(); audio.removeAttribute('src'); audio.load();
+    if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null;
+    media = null; buffer = null;
+  }
+  document.getElementById('stop').onclick = () => { cleanup(); status.textContent = 'Остановлено'; };
+  document.getElementById('start').onclick = async () => {
+    cleanup(); chunks = []; markers = []; waiting = [];
+    if (!window.MediaSource || !MediaSource.isTypeSupported('audio/mpeg')) { status.textContent = 'MediaSource audio/mpeg не поддерживается'; return; }
+    const run = new AbortController(); controller = run;
+    try {
+      media = new MediaSource(); objectUrl = URL.createObjectURL(media); audio.src = objectUrl;
+      const open = new Promise((resolve, reject) => { media.addEventListener('sourceopen', resolve, { once: true }); run.signal.addEventListener('abort', () => reject(new Error('Отменено')), { once: true }); });
+      const play = audio.play(); if (play) play.catch(e => note('play: ' + e.message));
+      await open; if (run.signal.aborted) return;
+      buffer = media.addSourceBuffer('audio/mpeg'); buffer.mode = 'sequence';
+      pump = () => {
+        if (!buffer || buffer.updating) return;
+        try {
+          if (buffer.buffered.length && audio.currentTime > 30 && buffer.buffered.start(0) < audio.currentTime - 20) {
+            buffer.remove(0, audio.currentTime - 20); return;
+          }
+          if (chunks.length) buffer.appendBuffer(chunks.shift());
+        } catch (e) { status.textContent = 'Ошибка буфера: ' + e.message; cleanup(); }
+      };
+      buffer.addEventListener('updateend', pump);
+      clock = setInterval(showMarkers, 50);
+      const response = await fetch(url, { headers: { 'Icy-MetaData': '1' }, signal: run.signal, cache: 'no-store' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const interval = Number(response.headers.get('icy-metaint'));
+      if (!Number.isSafeInteger(interval) || interval < 1) throw new Error('Нет доступного icy-metaint');
+      note('ICY interval: ' + interval); status.textContent = 'Получение потока';
+      let batch = [];
+      const frames = new NetFmMp3Frames((bytes, offset, time) => {
+        while (waiting.length && waiting[0].offset <= offset) { const m = waiting.shift(); markers.push({ time, text: m.text }); note('Метка в MP3: ' + time.toFixed(3) + ' с — ' + m.text); }
+        batch.push(bytes);
+      });
+      const demux = new NetFmIcyDemux(interval, bytes => frames.push(bytes), (bytes, offset) => {
+        const text = decodeMetadata(bytes).replace(/\0+$/, '');
+        const match = /StreamTitle='([^']*)'/.exec(text);
+        if (match && match[1]) waiting.push({ offset, text: match[1] });
+      });
+      reader = response.body.getReader();
+      for (;;) {
+        const result = await reader.read(); if (result.done || run.signal.aborted) break;
+        batch = []; demux.push(result.value);
+        if (batch.length) { const size = batch.reduce((n, b) => n + b.length, 0), data = new Uint8Array(size); let p = 0; for (const b of batch) { data.set(b, p); p += b.length; } chunks.push(data); if (chunks.reduce((n, b) => n + b.length, 0) > 2 * 1024 * 1024) throw new Error('Переполнение очереди'); pump(); }
+      }
+    } catch (e) { if (!run.signal.aborted) { status.textContent = 'Ошибка: ' + e.message; cleanup(); } }
+  };
+  function showMarkers() { while (markers && markers.length && markers[0].time <= audio.currentTime) { const m = markers.shift(); track.textContent = m.text; note('Показана при audio.currentTime=' + audio.currentTime.toFixed(3)); } }
+  audio.addEventListener('timeupdate', showMarkers);
+})();
+</script></html>

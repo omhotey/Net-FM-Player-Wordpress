@@ -86,5 +86,15 @@ assert.equal(encoding.usableMetadataText('Beyoncé', ''), 'Beyoncé');
   vm.runInContext(extract('beginEndOfTrackTransition'), boundary);
   boundary.beginEndOfTrackTransition();
   assert.equal(polls, 1, 'Predicted track end should check the server and retain current metadata');
+  let timeoutCleared = false;
+  const cancellation = vm.createContext({
+    preloadCover: () => new Promise(() => {}),
+    window: { setTimeout: () => 7, clearTimeout: () => { timeoutCleared = true; } }
+  });
+  vm.runInContext(extract('preloadCoverWithTimeout'), cancellation);
+  const pendingCover = cancellation.preloadCoverWithTimeout('slow.jpg', 350);
+  pendingCover.cancel();
+  assert.equal(await pendingCover.initial, '', 'Cancelled artwork wait must settle');
+  assert.equal(timeoutCleared, true, 'Cancelled artwork timeout must be cleared');
   console.log('Queue prefetch, stale generations, jingle replay and on-air confirmation checks passed');
 })().catch(error => { console.error(error); process.exitCode = 1; });

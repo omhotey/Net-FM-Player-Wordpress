@@ -115,6 +115,12 @@
     var coverRevealTimer = null;
     var coverRevealAnimation = null;
     var playRequested = false;
+    var icyTransport = null;
+    var icyUnavailable = false;
+    var icyData = null;
+    var icyTitle = '';
+    var icySequence = 0;
+    var icyPreparing = false;
     var explicitlyPaused = false;
     var hasMetadata = false;
     var trackElapsed = 0;
@@ -480,19 +486,21 @@
           if (!timeoutId) return;
           window.clearTimeout(timeoutId);
           timeoutId = null;
+          // Settle the abandoned transition as well; its generation guard
+          // prevents this fallback from changing the current track.
+          resolveInitial(fallback);
         }
       };
     }
 
     function setCover(src) {
       if (!art || !cover) return;
-      if (src === currentArt || src === pendingArt) return;
-
       if (!src) {
         pendingArt = '';
         applyCover('');
         return;
       }
+      if (src === currentArt || src === pendingArt) return;
 
       pendingArt = src;
       preloadCover(src).then(function (resolvedSrc) {
@@ -1337,7 +1345,84 @@
       if (reset !== false) setStaticBars();
     }
 
+    function decodeIcy(bytes) {
+      try { return new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+      catch (_) { return new TextDecoder('windows-1251').decode(bytes); }
+    }
+
+    function icyMatch(text) {
+      return typeof window.NetFmMatchTrack === 'function' ? window.NetFmMatchTrack(text, icyData) : null;
+    }
+
+    function applyIcyTrack(text) {
+      if (!icyTransport || !icyTransport.active || !playRequested) return;
+      icyTitle = text;
+      icyPreparing = false;
+      var entry = icyMatch(text);
+      var song = entry && entry.song ? entry.song : {};
+      var parts = text.split(' - ');
+      var nextArtist = song.artist || (parts.length > 1 ? parts.shift() : '');
+      var nextTitle = song.title || (parts.length ? parts.join(' - ') : text);
+      nextTitle = usableMetadataText(nextTitle, config.stationLabel);
+      nextArtist = usableMetadataText(nextArtist, '');
+      ++trackTransitionId;
+      pendingTrackKey = '';
+      currentTrackKey = 'icy:' + (++icySequence);
+      if (activeCoverLoad) { activeCoverLoad.cancel(); activeCoverLoad = null; }
+      if (initialMetadataRevealTimer) { window.clearTimeout(initialMetadataRevealTimer); initialMetadataRevealTimer = null; }
+      clearMetadataAnimation();
+      root.classList.remove('is-track-changing', 'is-track-pending', 'is-metadata-pending', 'is-metadata-revealing');
+      trackChangeActive = false;
+      trackEndReached = false;
+      resetTonearmClock();
+      title.textContent = nextTitle;
+      artist.textContent = nextArtist;
+      updateAccessibleTrack(nextTitle, nextArtist);
+      setCover('');
+      if (song.art) setCover(song.art);
+      var duration = Number(entry && entry.duration);
+      if (duration > 0) syncTonearm({ duration: duration, elapsed: 0 });
+    }
+
+    function stopIcy() {
+      if (icyTransport) icyTransport.stop();
+      icyTransport = null;
+      icyTitle = '';
+      if (icyPreparing) {
+        icyPreparing = false;
+        trackChangeActive = false;
+        root.classList.remove('is-track-changing');
+      }
+    }
+
     function startPlayback(forceStream) {
+      var url = selectedStream();
+      if (!url) { if (!setStream(forceStream, true)) return; url = selectedStream(); }
+      if (!icyUnavailable && streamKey !== 'hls' && window.NetFmIcyPlayer && window.NetFmIcyPlayer.supported()) {
+        stopIcy();
+        playRequested = true;
+        var transport = new window.NetFmIcyPlayer(audio, {
+          decode: decodeIcy,
+          onTrack: applyIcyTrack,
+          onPrepare: function (text) {
+            var match = icyMatch(text);
+            if (match && match.song && match.song.art) preloadCover(match.song.art, true);
+            if (icyTitle) { icyPreparing = true; returnTonearmToStart(); }
+          },
+          onFailure: function () {
+            if (!playRequested || destroyed || icyTransport !== transport) return;
+            icyUnavailable = true;
+            stopIcy();
+            startPlayback(true);
+          }
+        });
+        icyTransport = transport;
+        scheduleBuffering(250);
+        var icyPromise = transport.start(url);
+        if (icyPromise && typeof icyPromise.catch === 'function') icyPromise.catch(function () { if (playRequested && icyTransport === transport) { icyUnavailable = true; stopIcy(); startPlayback(true); } });
+        return;
+      }
+      stopIcy();
       if (!setStream(forceStream, true)) return;
       playRequested = true;
       scheduleBuffering(250);
@@ -1368,6 +1453,7 @@
       clearReconnectTimer();
       clearStalledTimer();
       audio.pause();
+      stopIcy();
       setPlaying(false);
       setBuffering(false);
     }
@@ -1525,6 +1611,7 @@
         })
         .then(function (data) {
           if (destroyed || requestId !== metadataRequestId) return;
+          icyData = data;
           if (!fallbackAttempted) showStatus('');
           var nowPlaying = data && data.now_playing ? data.now_playing : {};
           var song = nowPlaying.song || {};
@@ -1550,6 +1637,16 @@
           count.textContent = data.listeners && data.listeners.current != null
             ? data.listeners.current + ' СЛУШАЮТ'
             : '— СЛУШАЮТ';
+
+          // Audio-bound ICY metadata decides the visible track. API data may
+          // only supply artwork for the exact audible title.
+          if (icyTransport && icyTransport.active) {
+            var audible = icyTitle && icyMatch(icyTitle);
+            if (audible && audible.song && audible.song.art && currentArt !== audible.song.art && !pendingArt) setCover(audible.song.art);
+            prepareNextTrack(data && data.playing_next ? data.playing_next : null);
+            hasMetadata = true;
+            return;
+          }
 
           // Keep the last displayed track while the listener has paused playback.
           // Listener counts and speculative preloading can still update.
@@ -1622,6 +1719,7 @@
       if (coverRevealAnimation) coverRevealAnimation.cancel();
       if (activeCoverLoad) activeCoverLoad.cancel();
       if (metadataController) metadataController.abort();
+      stopIcy();
       if (titleObserver) titleObserver.disconnect();
       if (titleMeasureFrame) window.cancelAnimationFrame(titleMeasureFrame);
       cancelLongPress();
@@ -1690,12 +1788,24 @@
           if (!list) return;
           list.hidden = !list.hidden;
           toggleMenu.setAttribute('aria-expanded', list.hidden ? 'false' : 'true');
+          var player = toggleMenu.closest('[data-nfp]');
+          if (player) player.classList.toggle('is-station-menu-open', !list.hidden);
+          if (!list.hidden) {
+            var box = toggleMenu.getBoundingClientRect();
+            var below = Math.max(0, window.innerHeight - box.bottom - 12);
+            var above = Math.max(0, box.top - 12);
+            var openAbove = below < 180 && above > below;
+            list.classList.toggle('is-above', openAbove);
+            list.style.setProperty('--nfp-menu-max-height', Math.max(44, Math.min(320, openAbove ? above : below)) + 'px');
+          }
           return;
         }
         var choice = event.target.closest('[data-nfp-station-target]');
         if (!choice || !current.contains(choice)) return;
         if (choice.hasAttribute('aria-current')) {
           current.querySelector('[data-nfp-station-list]').hidden = true;
+          var currentPlayer = current.querySelector('[data-nfp]');
+          if (currentPlayer) currentPlayer.classList.remove('is-station-menu-open');
           current.querySelector('[data-nfp-menu-toggle]').setAttribute('aria-expanded', 'false');
           current.querySelector('[data-nfp-menu-toggle]').focus();
           return;
@@ -1721,6 +1831,8 @@
         var menu = current.querySelector('[data-nfp-menu-toggle]');
         if (list && !list.hidden && menu) {
           list.hidden = true;
+          var player = menu.closest('[data-nfp]');
+          if (player) player.classList.remove('is-station-menu-open');
           menu.setAttribute('aria-expanded', 'false');
           menu.focus();
         }
@@ -1732,6 +1844,8 @@
           var menu = current.querySelector('[data-nfp-menu-toggle]');
           if (list && menu) {
             list.hidden = true;
+            var player = menu.closest('[data-nfp]');
+            if (player) player.classList.remove('is-station-menu-open');
             menu.setAttribute('aria-expanded', 'false');
           }
         }, 0);

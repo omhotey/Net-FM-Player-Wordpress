@@ -1,0 +1,18 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>NET FM ICY transport test</title>
+<h1>Тест единого аудиопотока</h1><button id="start">Включить</button> <button id="stop">Остановить</button>
+<p id="status">Ожидание</p><p id="track">Метка не получена</p><audio id="audio" controls></audio><pre id="events"></pre>
+<script src="net-fm-icy.js"></script><script src="net-fm-mp3-frames.js"></script><script src="net-fm-metadata-clock.js"></script><script src="net-fm-icy-player.js"></script>
+<script>
+(() => {
+ const audio=document.getElementById('audio'), status=document.getElementById('status'), track=document.getElementById('track'), events=document.getElementById('events');
+ const transport = new NetFmIcyPlayer(audio, {
+   decode: bytes => { try { return new TextDecoder('utf-8', {fatal:true}).decode(bytes); } catch (_) { return new TextDecoder('windows-1251').decode(bytes); } },
+   onTrack: text => {track.textContent=text;events.textContent+='TRACK '+audio.currentTime.toFixed(3)+' '+text+'\n';},
+   onPrepare: text => {events.textContent+='PREPARE '+audio.currentTime.toFixed(3)+' '+text+'\n';},
+   onFailure: error => {status.textContent='Ошибка: '+error.message;}
+ });
+ document.getElementById('start').onclick=()=>{if(!NetFmIcyPlayer.supported()){status.textContent='MediaSource не поддерживается';return;}status.textContent='Запуск';const promise=transport.start('https://stream.net-fm.ru/listen/upwaveradio/stream128');if(promise)promise.catch(error=>{status.textContent='Ошибка запуска: '+error.message;transport.stop();});};
+ document.getElementById('stop').onclick=()=>{transport.stop();audio.pause();audio.removeAttribute('src');audio.load();status.textContent='Остановлено';};
+ audio.addEventListener('playing',()=>{status.textContent='Воспроизведение';});
+})();
+</script></html>

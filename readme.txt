@@ -38,6 +38,8 @@ The plugin requests the configured AzuraCast Now Playing endpoint directly from 
 * Improved next-track preparation and confirmation against the actual now-playing data.
 * Hide the Auto quality button and prefer a configured 128 kbps stream.
 * Reopen the live stream after pause and repair a specific Cyrillic encoding error.
+* Add experimental ICY audio-bound metadata with direct-stream fallback.
+* Improve the station menu for narrow screens.
 
 = 0.3.1 =
 * Added WordPress update checks for stable NET FM Player releases on GitHub.
